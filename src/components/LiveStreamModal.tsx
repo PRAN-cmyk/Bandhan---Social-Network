@@ -7,18 +7,12 @@ import {
   Mic,
   MicOff,
   RotateCcw,
-  Sparkles,
   Send,
   Heart,
   Eye,
-  Users,
   MessageCircle,
   Share2,
   Check,
-  Flame,
-  Laugh,
-  Volume2,
-  VolumeX,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { uploadMediaToCloudinary } from '../utils/cloudinary';
@@ -51,9 +45,7 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
 
-  const [streamActive, setStreamActive] = useState(false);
   const [isUsingFallback, setIsUsingFallback] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
 
   const [isLiveBroadcasting, setIsLiveBroadcasting] = useState(false);
   const [liveTitle, setLiveTitle] = useState('');
@@ -90,12 +82,10 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
-    setStreamActive(false);
     setIsScreenSharing(false);
   };
 
   const startCamera = async (overrideFacing?: 'user' | 'environment') => {
-    setCameraError(null);
     setIsUsingFallback(false);
     const targetFacing = overrideFacing || facingMode;
 
@@ -120,7 +110,6 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
             videoRef.current.srcObject = stream;
             videoRef.current.play().catch(() => {});
           }
-          setStreamActive(true);
           return;
         }
       }
@@ -128,7 +117,6 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
     } catch (err: any) {
       console.warn('Webcam stream unavailable or blocked, falling back to simulated HD live preview:', err);
       setIsUsingFallback(true);
-      setStreamActive(true);
       if (videoRef.current) {
         videoRef.current.srcObject = null;
         videoRef.current.src = SAMPLE_LIVE_FALLBACK_VIDEO;

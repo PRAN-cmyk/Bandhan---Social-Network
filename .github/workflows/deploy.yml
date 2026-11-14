@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: ['main']
+    branches: ['main', 'master']
   workflow_dispatch:
 
 permissions:
@@ -27,17 +27,23 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
-      - name: Build project
-        run: npm run build
+      - name: TypeScript & Security Rules Check
+        run: npm run lint && npx eslint firestore.rules
 
       - name: Setup Pages
+        id: pages
         uses: actions/configure-pages@v4
+
+      - name: Build project
+        env:
+          GITHUB_PAGES_BASE: ${{ steps.pages.outputs.base_path }}
+        run: npm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

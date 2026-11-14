@@ -13,19 +13,15 @@ import {
   Moon,
   Bookmark,
   LogOut,
-  ChevronDown,
   X,
-  Sparkles,
   Gamepad2,
   UserPlus,
   Flag,
   Settings,
-  Users as UsersIcon,
   Clock,
   Cloud,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { MainTab } from '../types';
 import { NotificationCenter } from './NotificationCenter';
 import { CloudinarySettingsModal } from './CloudinarySettingsModal';
 
@@ -46,9 +42,7 @@ export const Navbar: React.FC = () => {
     setIsAccountSecurityOpen,
     logout,
     profiles,
-    enterGroup,
     notifications,
-    markAllNotificationsRead,
     conversations,
     openChatWith,
     contacts,
@@ -59,7 +53,6 @@ export const Navbar: React.FC = () => {
     isMyStatusOnline,
     toggleMyOnlineStatus,
     marketplace,
-    showToast,
   } = useApp();
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);

@@ -26,7 +26,7 @@ import {
   orderBy,
   limit,
 } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, uploadBytesResumable, uploadString, getDownloadURL } from 'firebase/storage';
+import { getStorage, ref, uploadBytes, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // 1. Initialize Firebase App, Firestore, Auth & Storage
@@ -115,7 +115,6 @@ export function handleFirestoreError(
 }
 
 // 5. Authentication & Token Management
-let isSigningIn = false;
 let cachedAccessToken: string | null = null;
 
 export const initAuth = (
@@ -214,7 +213,6 @@ export const googleSignIn = async (
 } | null> => {
   const chosenProvider = useWorkspaceScopes ? workspaceGoogleProvider : baseGoogleProvider;
   try {
-    isSigningIn = true;
     const result = await signInWithPopup(auth, chosenProvider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     cachedAccessToken = credential?.accessToken || null;
@@ -248,8 +246,6 @@ export const googleSignIn = async (
     const err = new Error(friendlyMessage);
     (err as any).code = error?.code;
     throw err;
-  } finally {
-    isSigningIn = false;
   }
 };
 
@@ -309,11 +305,11 @@ export interface FirestoreCloudPostRecord {
 
 export const isCloudPlayableUrl = (url?: string | null): url is string => {
   if (!url) return false;
-  return /^(https?:\/\/|data:)/i.test(url) && !url.startsWith('data:video/')
-    ? true
-    : url.startsWith('data:video/')
-    ? url.length < 700_000
-    : /^(https?:\/\/)/i.test(url);
+  if (/^https?:\/\//i.test(url)) return true;
+  if (url.startsWith('data:')) {
+    return !url.startsWith('data:video/') || url.length < 700_000;
+  }
+  return false;
 };
 
 export const uploadMediaToFirebaseStorage = async (

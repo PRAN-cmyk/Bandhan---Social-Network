@@ -51,12 +51,10 @@ import {
   deletePostFromFirestoreCloud,
   subscribeToPublicCloudPosts,
   saveReelToFirestoreCloud,
-  deleteReelFromFirestoreCloud,
   subscribeToCloudReels,
   updateReelReactionCloud,
   updatePostReactionCloud,
   sendChatMessageCloud,
-  subscribeToChatMessagesCloud,
 } from '../firebase';
 
 const INITIAL_PROFILES: User[] = [
@@ -2851,14 +2849,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const toggleJoinGroup = (groupId: string, autoEnter: boolean = true) => {
     let joinedNow = false;
-    let targetGroup: SocialGroup | undefined;
 
     setGroups((prev) => {
       const next = prev.map((g) => {
         if (g.id === groupId) {
           const isJoined = !g.isJoined;
           joinedNow = isJoined;
-          targetGroup = g;
           showToast(
             isJoined
               ? language === 'bn'

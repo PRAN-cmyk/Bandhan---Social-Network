@@ -469,30 +469,6 @@ export const GamingView: React.FC = () => {
     return empty[0];
   };
 
-  const _legacyFindSmartTttMove = (board: ('X' | 'O' | null)[]): number => {
-    const empty = board
-      .map((v, i) => (v === null ? i : null))
-      .filter((v): v is number => v !== null);
-    // 1. Try to win as O
-    for (const idx of empty) {
-      const copy = [...board];
-      copy[idx] = 'O';
-      if (checkTttWinner(copy)?.winner === 'O') return idx;
-    }
-    // 2. Block X from winning
-    for (const idx of empty) {
-      const copy = [...board];
-      copy[idx] = 'X';
-      if (checkTttWinner(copy)?.winner === 'X') return idx;
-    }
-    // 3. Take center
-    if (empty.includes(4)) return 4;
-    // 4. Take a corner
-    const corners = [0, 2, 6, 8].filter((c) => empty.includes(c));
-    if (corners.length > 0) return corners[Math.floor(Math.random() * corners.length)];
-    return empty[Math.floor(Math.random() * empty.length)];
-  };
-
   const handleTttClick = (idx: number) => {
     if (tttBoard[idx] || tttResult) return;
     // Prevent clicking during AI's turn!

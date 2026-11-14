@@ -6,7 +6,6 @@ import {
   Video,
   Send,
   Smile,
-  Image as ImageIcon,
   ThumbsUp,
   Users,
   Check,
@@ -15,13 +14,12 @@ import {
   Paperclip,
   Trash2,
 } from 'lucide-react';
-import { fileToDataUrl } from '../utils/storage';
+import { uploadMediaToCloudinary } from '../utils/cloudinary';
 import { useApp } from '../context/AppContext';
 import {
   uploadVoiceNoteToStorage,
   setChatTypingStatusCloud,
   subscribeToChatTypingStatusCloud,
-  markChatMessageSeenCloud,
 } from '../firebase';
 
 export const MessengerDock: React.FC = () => {
@@ -488,6 +486,27 @@ export const MessengerDock: React.FC = () => {
                                 : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200/70 dark:border-slate-700 rounded-bl-xs'
                             }`}
                           >
+                            {msg.mediaUrl && (
+                              <div className="mb-1.5 overflow-hidden rounded-xl">
+                                {/\.(mp4|webm|mov|m4v)(\?|$)/i.test(msg.mediaUrl) ||
+                                msg.mediaUrl.startsWith('data:video/') ? (
+                                  <video
+                                    src={msg.mediaUrl}
+                                    controls
+                                    playsInline
+                                    preload="metadata"
+                                    className="w-52 max-w-full rounded-xl max-h-44 object-cover"
+                                  />
+                                ) : (
+                                  <img
+                                    src={msg.mediaUrl}
+                                    alt={msg.text || 'Attachment'}
+                                    referrerPolicy="no-referrer"
+                                    className="w-52 max-w-full rounded-xl max-h-48 object-cover"
+                                  />
+                                )}
+                              </div>
+                            )}
                             {msg.audioUrl ? (
                               <div className="my-1.5 space-y-1">
                                 <audio controls src={msg.audioUrl} className="w-52 h-8 max-w-full rounded-lg" />
@@ -496,7 +515,7 @@ export const MessengerDock: React.FC = () => {
                                 </span>
                               </div>
                             ) : (
-                              <p className="break-words">{msg.text}</p>
+                              msg.text && <p className="break-words">{msg.text}</p>
                             )}
                             <div className="flex items-center justify-between gap-1.5 mt-0.5">
                               <span
@@ -611,8 +630,10 @@ export const MessengerDock: React.FC = () => {
                           const file = e.target.files?.[0];
                           if (!file) return;
                           try {
-                            const url = await fileToDataUrl(file);
-                            handleSend(friendId, `🖼️ ${file.name}`);
+                            const uploaded = await uploadMediaToCloudinary(file);
+                            sendMessage(friendId, file.name, {
+                              mediaUrl: uploaded.secureUrl || uploaded.url,
+                            });
                           } catch {
                             // ignore
                           }

@@ -15,12 +15,9 @@ import {
   X,
   Play,
   Pause,
-  Disc3,
-  ShieldCheck,
   RotateCcw,
   RotateCw,
   FastForward,
-  Check,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { sampleUsers } from '../data/mockData';
@@ -46,13 +43,11 @@ const DEFAULT_REEL_COMMENTS: PostComment[] = [
 export const ReelsView: React.FC = () => {
   const {
     reels,
-    audioLibrary,
     currentUser,
     toggleLikeReel,
     addReelComment,
     incrementReelShares,
     setIsCreateReelOpen,
-    setIsCreateStoryOpen,
     isFollowingUser,
     toggleFollowUser,
     viewUserProfile,
