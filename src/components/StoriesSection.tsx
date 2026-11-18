@@ -91,7 +91,12 @@ export const StoriesSection: React.FC = () => {
           const isVideo =
             story.mediaType === 'video' ||
             Boolean(story.videoUrl) ||
-            Boolean(story.mediaUrl && (story.mediaUrl.startsWith('data:video') || story.mediaUrl.endsWith('.mp4')));
+            (story.mediaType !== 'image' &&
+              Boolean(
+                story.mediaUrl &&
+                  (story.mediaUrl.startsWith('data:video') ||
+                    /\.(mp4|webm|mov|m4v)(\?|$)/i.test(story.mediaUrl)),
+              ));
           const videoSrc = story.videoUrl || story.mediaUrl;
 
           return (

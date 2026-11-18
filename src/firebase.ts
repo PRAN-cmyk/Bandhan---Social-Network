@@ -454,6 +454,7 @@ export const saveStoryToFirestoreCloud = async (story: {
   authorName: string;
   authorAvatar: string;
   mediaUrl?: string;
+  videoUrl?: string;
   mediaType?: string;
   text?: string;
   gradientBg?: string;
@@ -466,29 +467,83 @@ export const saveStoryToFirestoreCloud = async (story: {
   const safeId = story.id.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 128);
   const expiresAtMs = Date.now() + 24 * 60 * 60 * 1000;
   const safeMediaUrl = isCloudPlayableUrl(story.mediaUrl) ? story.mediaUrl : undefined;
+  const safeVideoUrl = isCloudPlayableUrl(story.videoUrl) ? story.videoUrl : undefined;
   const safeAudioUrl = isCloudPlayableUrl(story.audioUrl) ? story.audioUrl : undefined;
-  if (!safeMediaUrl && story.mediaType !== 'text' && !story.gradientBg) return;
+  if (!safeMediaUrl && !safeVideoUrl && story.mediaType !== 'text' && !story.gradientBg) return;
 
-  await setDoc(doc(db, 'cloudStories', safeId), {
-    ...story,
-    mediaUrl: safeMediaUrl || null,
-    audioUrl: safeAudioUrl || null,
-    id: safeId,
-    authorId: user.uid,
-    createdAt: serverTimestamp(),
-    expiresAt: expiresAtMs,
-  });
+  try {
+    await setDoc(doc(db, 'cloudStories', safeId), {
+      ...story,
+      mediaUrl: safeMediaUrl || null,
+      videoUrl: safeVideoUrl || null,
+      audioUrl: safeAudioUrl || null,
+      id: safeId,
+      authorId: user.uid,
+      createdAt: serverTimestamp(),
+      expiresAt: expiresAtMs,
+    });
+  } catch (err) {
+    console.warn('Cloud story save notice:', err);
+  }
 };
 
 export const subscribeToCloudStories = (onUpdate: (stories: any[]) => void) => {
-  const q = query(collection(db, 'cloudStories'));
-  return onSnapshot(q, (snapshot) => {
-    const now = Date.now();
-    const activeStories = snapshot.docs
-      .map((d) => d.data())
-      .filter((s) => !s.expiresAt || s.expiresAt > now);
-    onUpdate(activeStories);
-  });
+  if (!auth.currentUser) return () => {};
+  const q = query(collection(db, 'cloudStories'), limit(50));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const now = Date.now();
+      const activeStories = snapshot.docs
+        .map((d) => d.data())
+        .filter((s) => !s.expiresAt || s.expiresAt > now);
+      onUpdate(activeStories);
+    },
+    (err) => {
+      console.warn('Cloud stories listener notice:', err);
+    },
+  );
+};
+
+export const subscribeToCloudUsers = (
+  onUpdate: (
+    users: Array<{
+      uid: string;
+      name: string;
+      nameBn?: string;
+      username: string;
+      avatar: string;
+      bio?: string;
+      city?: string;
+    }>,
+  ) => void,
+) => {
+  if (!auth.currentUser) return () => {};
+  const q = query(collection(db, 'users'), limit(50));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const list = snapshot.docs.map((d) => {
+        const data = d.data();
+        return {
+          uid: String(data.uid || d.id),
+          name: String(data.name || 'Bandhan Member'),
+          nameBn: data.nameBn ? String(data.nameBn) : undefined,
+          username: String(data.username || d.id),
+          avatar: String(
+            data.avatar ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(String(data.name || 'User'))}`,
+          ),
+          bio: data.bio ? String(data.bio) : undefined,
+          city: data.city ? String(data.city) : undefined,
+        };
+      });
+      onUpdate(list);
+    },
+    (err) => {
+      console.warn('Cloud users listener notice:', err);
+    },
+  );
 };
 
 // 8. Realtime WebRTC Call Signaling via Firestore
@@ -612,6 +667,7 @@ export const subscribeToChatMessagesCloud = (
   chatId: string,
   onUpdate: (messages: CloudChatMessage[]) => void,
 ) => {
+  if (!auth.currentUser) return () => {};
   const safeChatId = chatId.replace(/[^a-zA-Z0-9_-]/g, '_');
   const q = query(
     collection(db, 'cloudChats', safeChatId, 'messages'),

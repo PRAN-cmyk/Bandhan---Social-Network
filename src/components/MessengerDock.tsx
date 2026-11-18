@@ -20,6 +20,7 @@ import {
   uploadVoiceNoteToStorage,
   setChatTypingStatusCloud,
   subscribeToChatTypingStatusCloud,
+  subscribeToChatMessagesCloud,
 } from '../firebase';
 
 export const MessengerDock: React.FC = () => {
@@ -27,8 +28,11 @@ export const MessengerDock: React.FC = () => {
     activeChatIds,
     conversations,
     currentUser,
+    isAuthenticated,
     closeChat,
     sendMessage,
+    syncCloudChatMessages,
+    showToast,
     startCall,
     viewUserProfile,
     groups,
@@ -43,6 +47,7 @@ export const MessengerDock: React.FC = () => {
 
   const [minimizedIds, setMinimizedIds] = useState<string[]>([]);
   const [isGroupMinimized, setIsGroupMinimized] = useState(false);
+  const [activeMobilePane, setActiveMobilePane] = useState<'direct' | 'group'>('direct');
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [groupInput, setGroupInput] = useState('');
   const [recordingFriendId, setRecordingFriendId] = useState<string | null>(null);
@@ -52,6 +57,9 @@ export const MessengerDock: React.FC = () => {
   const recordIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messagesEndRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const groupMessagesEndRef = useRef<HTMLDivElement | null>(null);
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const prevChatIdsRef = useRef<string[]>([]);
+  const prevGroupChatIdRef = useRef<string | null>(null);
 
   const startVoiceRecording = async (friendId: string) => {
     try {
@@ -80,22 +88,49 @@ export const MessengerDock: React.FC = () => {
   const [typingMap, setTypingMap] = useState<Record<string, boolean>>({});
   const typingTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  // Subscribe to real-time typing indicators in open chats
+  // Subscribe to real-time typing indicators and incoming messages in open chats
   useEffect(() => {
+    if (!isAuthenticated || activeChatIds.length === 0) return;
     const unsubs: (() => void)[] = [];
     activeChatIds.forEach((friendId) => {
       const chatId = [currentUser.id, friendId].sort().join('_');
-      const unsub = subscribeToChatTypingStatusCloud(chatId, (users) => {
+      const unsubTyping = subscribeToChatTypingStatusCloud(chatId, (users) => {
         const isPeerTyping = users.some((u) => u.userId === friendId);
         setTypingMap((prev) => ({ ...prev, [friendId]: isPeerTyping }));
       });
-      unsubs.push(unsub);
+      const unsubMessages = subscribeToChatMessagesCloud(chatId, (msgs) => {
+        syncCloudChatMessages(friendId, msgs);
+      });
+      unsubs.push(unsubTyping, unsubMessages);
     });
 
     return () => {
       unsubs.forEach((u) => u());
     };
-  }, [activeChatIds, currentUser.id]);
+  }, [activeChatIds, currentUser.id, isAuthenticated, syncCloudChatMessages]);
+
+  // Ensure newly opened chat is un-minimized, shown on mobile, and focused for typing
+  useEffect(() => {
+    const prevIds = prevChatIdsRef.current;
+    const latestId = activeChatIds[activeChatIds.length - 1];
+    const prevLatestId = prevIds[prevIds.length - 1];
+    if (latestId && (latestId !== prevLatestId || activeChatIds.length > prevIds.length)) {
+      setMinimizedIds((prev) => prev.filter((id) => id !== latestId));
+      setActiveMobilePane('direct');
+      setTimeout(() => {
+        inputRefs.current[latestId]?.focus();
+      }, 80);
+    }
+    prevChatIdsRef.current = activeChatIds;
+  }, [activeChatIds]);
+
+  useEffect(() => {
+    if (activeGroupChatId && activeGroupChatId !== prevGroupChatIdRef.current) {
+      setIsGroupMinimized(false);
+      setActiveMobilePane('group');
+    }
+    prevGroupChatIdRef.current = activeGroupChatId;
+  }, [activeGroupChatId]);
 
   const handleInputChange = (friendId: string, val: string) => {
     setInputs((prev) => ({ ...prev, [friendId]: val }));
@@ -197,12 +232,14 @@ export const MessengerDock: React.FC = () => {
   const visibleChatIds = activeGroup ? activeChatIds.slice(-1) : activeChatIds.slice(-2);
 
   return (
-    <div className="fixed bottom-0 right-2 sm:right-4 z-40 flex items-end justify-end gap-2 sm:gap-3 max-w-[calc(100vw-1rem)] pointer-events-none">
+    <div className="fixed bottom-16 md:bottom-0 right-2 sm:right-4 z-[45] flex items-end justify-end gap-2 sm:gap-3 max-w-[calc(100vw-1rem)] pointer-events-none">
       {/* ACTIVE GROUP CHAT WINDOW */}
       {activeGroup && (
         <div
-          className={`pointer-events-auto w-[calc(100vw-1rem)] max-w-[330px] sm:w-80 bg-white dark:bg-slate-900 rounded-t-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden transition-all duration-200 ${
-            isGroupMinimized ? 'h-12' : 'h-[min(410px,calc(100vh-5.5rem))] sm:h-[420px]'
+          className={`pointer-events-auto w-[calc(100vw-1rem)] max-w-[330px] sm:w-80 bg-white dark:bg-slate-900 rounded-t-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex-col overflow-hidden transition-all duration-200 ${
+            activeMobilePane === 'group' || visibleChatIds.length === 0 ? 'flex' : 'hidden md:flex'
+          } ${
+            isGroupMinimized ? 'h-12' : 'h-[min(390px,calc(100dvh-9.5rem))] sm:h-[420px]'
           }`}
         >
           {/* Group Chat Header */}
@@ -353,10 +390,12 @@ export const MessengerDock: React.FC = () => {
         return (
           <div
             key={friendId}
-            className={`pointer-events-auto w-[calc(100vw-1rem)] max-w-[330px] sm:w-80 bg-white dark:bg-slate-900 rounded-t-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden transition-all duration-200 ${
-              idx > 0 ? 'hidden md:flex' : 'flex'
+            className={`pointer-events-auto w-[calc(100vw-1rem)] max-w-[330px] sm:w-80 bg-white dark:bg-slate-900 rounded-t-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex-col overflow-hidden transition-all duration-200 ${
+              idx < visibleChatIds.length - 1 || (activeGroup && activeMobilePane === 'group')
+                ? 'hidden md:flex'
+                : 'flex'
             } ${
-              isMinimized ? 'h-12' : 'h-[min(410px,calc(100vh-5.5rem))] sm:h-[420px]'
+              isMinimized ? 'h-12' : 'h-[min(390px,calc(100dvh-9.5rem))] sm:h-[420px]'
             }`}
           >
             {/* Chat Header */}
@@ -458,6 +497,14 @@ export const MessengerDock: React.FC = () => {
                     </p>
                     <p className="text-[10px] text-slate-400">{conv.friend.role}</p>
                   </div>
+
+                  {conv.messages.length === 0 && (
+                    <div className="py-4 px-3 text-center text-[11px] text-slate-400 dark:text-slate-500">
+                      {language === 'bn'
+                        ? 'এখনো কোনো মেসেজ নেই — নিচে লিখে মেসেজ পাঠান 👋'
+                        : 'No messages yet — type below to send a message 👋'}
+                    </div>
+                  )}
 
                   {conv.messages.map((msg, idx) => {
                     const isMe = msg.senderId === currentUser.id;
@@ -631,11 +678,22 @@ export const MessengerDock: React.FC = () => {
                           if (!file) return;
                           try {
                             const uploaded = await uploadMediaToCloudinary(file);
-                            sendMessage(friendId, file.name, {
-                              mediaUrl: uploaded.secureUrl || uploaded.url,
-                            });
+                            const mediaUrl = uploaded.secureUrl || uploaded.url;
+                            if (mediaUrl) {
+                              sendMessage(friendId, file.name, { mediaUrl });
+                            } else {
+                              showToast(
+                                language === 'bn'
+                                  ? 'ফাইল আপলোড সফল হয়নি, আবার চেষ্টা করুন'
+                                  : 'Could not upload attachment',
+                              );
+                            }
                           } catch {
-                            // ignore
+                            showToast(
+                              language === 'bn'
+                                ? 'ফাইল পাঠানো যায়নি, আবার চেষ্টা করুন'
+                                : 'Failed to send attachment',
+                            );
                           }
                           e.target.value = '';
                         }}
@@ -682,6 +740,9 @@ export const MessengerDock: React.FC = () => {
                         </button>
                         <div className="flex-1 relative">
                           <input
+                            ref={(el) => {
+                              inputRefs.current[friendId] = el;
+                            }}
                             type="text"
                             value={inputs[friendId] || ''}
                             onChange={(e) => handleInputChange(friendId, e.target.value)}

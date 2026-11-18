@@ -420,7 +420,7 @@ export const FriendsView: React.FC = () => {
                 {/* Follower / Following Toggle Bar */}
                 <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                   <span className="text-[11px] text-slate-400">
-                    {friend.followersCount || 340} {language === 'bn' ? 'জন ফলোয়ার' : 'followers'}
+                    {friend.followersCount || 0} {language === 'bn' ? 'জন ফলোয়ার' : 'followers'}
                   </span>
                   <button
                     type="button"

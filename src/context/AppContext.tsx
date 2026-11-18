@@ -50,11 +50,15 @@ import {
   savePostToFirestoreCloud,
   deletePostFromFirestoreCloud,
   subscribeToPublicCloudPosts,
+  saveStoryToFirestoreCloud,
+  subscribeToCloudStories,
+  subscribeToCloudUsers,
   saveReelToFirestoreCloud,
   subscribeToCloudReels,
   updateReelReactionCloud,
   updatePostReactionCloud,
   sendChatMessageCloud,
+  CloudChatMessage,
 } from '../firebase';
 
 const INITIAL_PROFILES: User[] = [
@@ -365,6 +369,7 @@ interface AppContextType {
     text: string,
     options?: { audioUrl?: string; audioDuration?: number; mediaUrl?: string },
   ) => void;
+  syncCloudChatMessages: (friendId: string, cloudMessages: CloudChatMessage[]) => void;
   activeCall: ActiveCall | null;
   startCall: (friend: User, type: 'audio' | 'video') => void;
   endCall: (durationText?: string) => void;
@@ -1297,6 +1302,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     let unsubscribePosts: (() => void) | null = null;
     let unsubscribeReels: (() => void) | null = null;
+    let unsubscribeStories: (() => void) | null = null;
+    let unsubscribeUsers: (() => void) | null = null;
     const unsubscribeAuth = initAuth(
       (fbUser, token) => {
         setFirebaseUserEmail(fbUser.email || fbUser.displayName || 'Connected');
@@ -1475,6 +1482,80 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return merged;
           });
         });
+
+        if (unsubscribeStories) unsubscribeStories();
+        unsubscribeStories = subscribeToCloudStories((cloudStories) => {
+          if (!cloudStories || cloudStories.length === 0) return;
+          setStories((prev) => {
+            const existingIds = new Set(prev.map((s) => s.id));
+            const mapped: Story[] = cloudStories
+              .filter((cs) => cs?.id && !existingIds.has(cs.id))
+              .map((cs) => ({
+                id: String(cs.id),
+                author: {
+                  id: String(cs.authorId || 'cloud_user'),
+                  name: String(cs.authorName || 'Bandhan Member'),
+                  nameBn: String(cs.authorName || 'বন্ধন সদস্য'),
+                  username: String(cs.authorName || 'user').toLowerCase().replace(/\s+/g, '.'),
+                  avatar:
+                    cs.authorAvatar ||
+                    `https://ui-avatars.com/api/?name=${encodeURIComponent(cs.authorName || 'User')}`,
+                  followersCount: 0,
+                  friendsCount: 0,
+                  isVerified: true,
+                },
+                mediaUrl: cs.mediaUrl ? repairLegacyMediaUrl(String(cs.mediaUrl)) : undefined,
+                videoUrl: cs.videoUrl ? repairLegacyMediaUrl(String(cs.videoUrl)) : undefined,
+                mediaType: (cs.mediaType as 'image' | 'video' | 'text') || (cs.videoUrl ? 'video' : cs.mediaUrl ? 'image' : 'text'),
+                text: cs.text ? String(cs.text) : undefined,
+                gradientBg: cs.gradientBg ? String(cs.gradientBg) : undefined,
+                audioUrl: cs.audioUrl ? repairLegacyMediaUrl(String(cs.audioUrl)) : undefined,
+                audioTitle: cs.audioTitle ? String(cs.audioTitle) : undefined,
+                audioArtist: cs.audioArtist ? String(cs.audioArtist) : undefined,
+                createdAt: 'Cloud Sync',
+                expiresAt: typeof cs.expiresAt === 'number' ? cs.expiresAt : Date.now() + STORY_TTL_MS,
+                isViewed: false,
+              }));
+            const validNew = filterValidStories(mapped);
+            if (validNew.length === 0) return prev;
+            const next = [...validNew, ...filterValidStories(prev)];
+            saveStateToDB('bandhan_stories', next);
+            return next;
+          });
+        });
+
+        if (unsubscribeUsers) unsubscribeUsers();
+        unsubscribeUsers = subscribeToCloudUsers((cloudUsers) => {
+          if (!cloudUsers || cloudUsers.length === 0) return;
+          const mappedUsers: User[] = cloudUsers
+            .filter((cu) => cu.uid && cu.uid !== fbUser.uid)
+            .map((cu) => ({
+              id: cu.uid,
+              name: cu.name,
+              nameBn: cu.nameBn || cu.name,
+              username: cu.username,
+              avatar: cu.avatar,
+              bio: cu.bio || 'Bandhan Member',
+              city: cu.city || 'Bangladesh',
+              followersCount: 0,
+              friendsCount: 0,
+              isOnline: true,
+              isVerified: true,
+            }));
+          if (mappedUsers.length === 0) return;
+
+          setContacts((prev) => {
+            const map = new Map<string, User>();
+            prev.forEach((u) => map.set(u.id, u));
+            mappedUsers.forEach((u) => {
+              const existing = map.get(u.id);
+              map.set(u.id, existing ? { ...existing, ...u } : u);
+            });
+            const next = Array.from(map.values());
+            saveStateToDB('bandhan_contacts', next);
+            return next;
+          });
+        });
       },
       () => {
         setFirebaseUserEmail(null);
@@ -1487,6 +1568,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           unsubscribeReels();
           unsubscribeReels = null;
         }
+        if (unsubscribeStories) {
+          unsubscribeStories();
+          unsubscribeStories = null;
+        }
+        if (unsubscribeUsers) {
+          unsubscribeUsers();
+          unsubscribeUsers = null;
+        }
       },
     );
 
@@ -1494,6 +1583,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubscribeAuth();
       if (unsubscribePosts) unsubscribePosts();
       if (unsubscribeReels) unsubscribeReels();
+      if (unsubscribeStories) unsubscribeStories();
+      if (unsubscribeUsers) unsubscribeUsers();
     };
   }, []);
 
@@ -2467,6 +2558,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return next;
     });
 
+    // Sync to Firestore Cloud when media is cloud-playable or text story
+    saveStoryToFirestoreCloud({
+      id: newStory.id,
+      authorId: currentUser.id,
+      authorName: currentUser.name,
+      authorAvatar: currentUser.avatar,
+      mediaUrl: newStory.mediaUrl,
+      videoUrl: newStory.videoUrl,
+      mediaType: newStory.mediaType,
+      text: newStory.text,
+      gradientBg: newStory.gradientBg,
+      audioUrl: newStory.audioUrl,
+      audioTitle: newStory.audioTitle,
+      audioArtist: newStory.audioArtist,
+    }).catch(() => {});
+
     // Automatically add Story's audio to the shared Audio Library
     const trackTitle =
       storyData.audioTitle?.trim() ||
@@ -2496,8 +2603,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsCreateStoryOpen(false);
     showToast(
       language === 'bn'
-        ? '🎵 আপনার স্টোরি প্রকাশিত হয়েছে এবং অডিওটি অডিও লাইব্রেরিতে যুক্ত হয়েছে!'
-        : '🎵 Story published & audio added to Audio Library!',
+        ? '🎵 আপনার স্টোরি প্রকাশিত হয়েছে!'
+        : '🎵 Your story has been published!',
     );
   };
 
@@ -2697,32 +2804,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Chat Actions
   const openChatWith = (friend: User) => {
-    if (!activeChatIds.includes(friend.id)) {
-      const newActive = [...activeChatIds, friend.id].slice(-3);
-      setActiveChatIds(newActive);
-    }
-    if (!conversations[friend.id]) {
-      setConversations((prev) => {
-        const next = {
-          ...prev,
-          [friend.id]: {
-            friend,
-            messages: [
-              {
-                id: `m_init_${Date.now()}`,
-                senderId: friend.id,
-                text: language === 'bn' ? `হাই! কেমন আছেন? 😊` : `Hey! How are you doing? 😊`,
-                timestamp: 'Just now',
-              },
-            ],
-            unreadCount: 0,
-            isOnline: true,
-          },
-        };
-        saveStateToDB('bandhan_conversations', next);
-        return next;
-      });
-    }
+    setActiveChatIds((prev) => {
+      const without = prev.filter((id) => id !== friend.id);
+      return [...without, friend.id].slice(-3);
+    });
+    setConversations((prev) => {
+      const existing = prev[friend.id];
+      const next = {
+        ...prev,
+        [friend.id]: existing
+          ? { ...existing, friend, unreadCount: 0 }
+          : {
+              friend,
+              messages: [],
+              unreadCount: 0,
+              isOnline: friend.isOnline !== false,
+            },
+      };
+      saveStateToDB('bandhan_conversations', next);
+      return next;
+    });
   };
 
   const closeChat = (friendId: string) => {
@@ -2737,7 +2838,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!text.trim() && !options?.audioUrl && !options?.mediaUrl) return;
 
     const newMsg: ChatMessage = {
-      id: `msg_${Date.now()}`,
+      id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
       senderId: currentUser.id,
       text: text.trim(),
       audioUrl: options?.audioUrl,
@@ -2747,12 +2848,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isRead: false,
     };
 
-    const targetFriend = contacts.find((c) => c.id === friendId) || sampleUsers.arafat;
+    const fallbackUser: User = {
+      id: friendId,
+      name: 'Bandhan Member',
+      nameBn: 'বন্ধন সদস্য',
+      username: friendId,
+      avatar: createAvatarUrl('Bandhan Member', '#2563eb', '#ffffff'),
+      followersCount: 0,
+      friendsCount: 0,
+    };
 
     setConversations((prev) => {
+      const targetFriend =
+        prev[friendId]?.friend ||
+        contacts.find((c) => c.id === friendId) ||
+        profiles.find((p) => p.id === friendId) ||
+        fallbackUser;
+
       const conv = prev[friendId] || {
         friend: targetFriend,
-        isOnline: true,
+        isOnline: targetFriend.isOnline !== false,
         unreadCount: 0,
         messages: [],
       };
@@ -2781,6 +2896,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('Chat message cloud sync notice:', err);
     });
   };
+
+  const syncCloudChatMessages = useCallback(
+    (friendId: string, cloudMessages: CloudChatMessage[]) => {
+      if (!cloudMessages || cloudMessages.length === 0) return;
+      setConversations((prev) => {
+        const existingConv = prev[friendId];
+        if (!existingConv) return prev;
+        const existingIds = new Set(existingConv.messages.map((m) => m.id));
+        const incoming: ChatMessage[] = cloudMessages
+          .filter((cm) => cm?.id && !existingIds.has(cm.id))
+          .map((cm) => ({
+            id: cm.id,
+            senderId: cm.senderId,
+            text: cm.text || '',
+            audioUrl: cm.audioUrl,
+            audioDuration: cm.audioDuration,
+            mediaUrl: cm.imageUrl,
+            timestamp: cm.timestamp
+              ? new Date(cm.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : 'Just now',
+            isRead: true,
+          }));
+        if (incoming.length === 0) return prev;
+        const merged = [...existingConv.messages, ...incoming];
+        const next = {
+          ...prev,
+          [friendId]: {
+            ...existingConv,
+            messages: merged,
+          },
+        };
+        saveStateToDB('bandhan_conversations', next);
+        return next;
+      });
+    },
+    [],
+  );
 
   // Notifications
   const markNotificationRead = (id: string) => {
@@ -3196,6 +3348,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         openChatWith,
         closeChat,
         sendMessage,
+        syncCloudChatMessages,
         activeCall,
         startCall,
         endCall,

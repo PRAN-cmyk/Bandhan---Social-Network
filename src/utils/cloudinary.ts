@@ -152,7 +152,7 @@ export async function uploadMediaToCloudinary(
     const response = await new Promise<any>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', uploadUrl);
-      xhr.timeout = 120000;
+      xhr.timeout = resourceType === 'video' ? 120000 : 20000;
 
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable && options?.onProgress) {
@@ -165,6 +165,10 @@ export async function uploadMediaToCloudinary(
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             const data = JSON.parse(xhr.responseText);
+            if (!data?.secure_url && !data?.url) {
+              reject(new Error('Missing URL in Cloudinary response'));
+              return;
+            }
             if (options?.onProgress) options.onProgress(100);
             resolve(data);
           } catch (e) {

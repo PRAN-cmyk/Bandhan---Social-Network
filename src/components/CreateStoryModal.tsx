@@ -37,13 +37,14 @@ export const CreateStoryModal: React.FC = () => {
     showToast,
     setIsAudioLibraryOpen,
   } = useApp();
-  const [mode, setMode] = useState<'text' | 'photo' | 'video'>('text');
+  const [mode, setMode] = useState<'text' | 'photo' | 'video'>('photo');
   const [text, setText] = useState('');
   const [audioTitle, setAudioTitle] = useState(() => `${currentUser?.name || 'Bandhan'} - Story Audio 🎵`);
   const [audioArtist, setAudioArtist] = useState(() => currentUser?.name || 'Bandhan Music');
   const [audioUrl, setAudioUrl] = useState<string | undefined>(undefined);
   const [selectedGradient, setSelectedGradient] = useState(GRADIENTS[0]);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoFileName, setPhotoFileName] = useState<string | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [videoFileName, setVideoFileName] = useState<string | null>(null);
   const [isPreviewMuted, setIsPreviewMuted] = useState(true);
@@ -74,19 +75,27 @@ export const CreateStoryModal: React.FC = () => {
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = '';
+
     setIsUploading(true);
     setIsUploadingCloudinary(true);
     setCloudinaryProgress(15);
 
     const isVid = checkIsVideoFile(file);
-    const instantLocalUrl = URL.createObjectURL(file);
+    let localPersistentUrl = '';
+    try {
+      localPersistentUrl = await fileToDataUrl(file);
+    } catch {
+      localPersistentUrl = URL.createObjectURL(file);
+    }
 
     if (isVid) {
-      setVideoPreview(instantLocalUrl);
+      setVideoPreview(localPersistentUrl);
       setVideoFileName(`${file.name} (${(file.size / (1024 * 1024)).toFixed(1)} MB)`);
       setMode('video');
     } else {
-      setPhotoPreview(instantLocalUrl);
+      setPhotoPreview(localPersistentUrl);
+      setPhotoFileName(file.name);
       setMode('photo');
     }
 
@@ -95,27 +104,31 @@ export const CreateStoryModal: React.FC = () => {
         onProgress: (p) => setCloudinaryProgress(p),
       });
 
+      const resolvedUrl = result.secureUrl || result.url || localPersistentUrl;
       if (isVid) {
-        setVideoPreview(result.secureUrl);
-        showToast(
-          language === 'bn'
-            ? `ক্লাউডিনারি: ভিডিও (${(file.size / (1024 * 1024)).toFixed(1)} MB) সফলভাবে সিডিএন-এ আপলোড হয়েছে!`
-            : `Cloudinary Free Tier: Video (${(file.size / (1024 * 1024)).toFixed(1)} MB) uploaded to CDN!`,
-        );
+        setVideoPreview(resolvedUrl);
+        if (result.isCloudinary) {
+          showToast(
+            language === 'bn'
+              ? `ক্লাউডিনারি: ভিডিও (${(file.size / (1024 * 1024)).toFixed(1)} MB) সফলভাবে সিডিএন-এ আপলোড হয়েছে!`
+              : `Cloudinary Free Tier: Video (${(file.size / (1024 * 1024)).toFixed(1)} MB) uploaded to CDN!`,
+          );
+        }
       } else {
-        setPhotoPreview(result.secureUrl);
-        showToast(
-          language === 'bn'
-            ? 'ক্লাউডিনারি সিডিএন-এ ছবি সফলভাবে আপলোড হয়েছে!'
-            : 'Photo uploaded to Cloudinary Free CDN!',
-        );
+        setPhotoPreview(resolvedUrl);
+        if (result.isCloudinary) {
+          showToast(
+            language === 'bn'
+              ? 'ক্লাউডিনারি সিডিএন-এ ছবি সফলভাবে আপলোড হয়েছে!'
+              : 'Photo uploaded to Cloudinary Free CDN!',
+          );
+        }
       }
     } catch {
-      const fallbackUrl = await fileToDataUrl(file);
       if (isVid) {
-        setVideoPreview(fallbackUrl);
+        setVideoPreview(localPersistentUrl);
       } else {
-        setPhotoPreview(fallbackUrl);
+        setPhotoPreview(localPersistentUrl);
       }
       showToast(language === 'bn' ? 'মিডিয়া লোকাল ড্রাইভে সেভ হয়েছে' : 'Saved with local fallback');
     } finally {
@@ -202,6 +215,7 @@ export const CreateStoryModal: React.FC = () => {
     setAudioArtist(currentUser?.name || 'Bandhan Music');
     setAudioUrl(undefined);
     setPhotoPreview(null);
+    setPhotoFileName(null);
     setVideoPreview(null);
     setVideoFileName(null);
   };
@@ -303,16 +317,68 @@ export const CreateStoryModal: React.FC = () => {
 
             {/* Photo mode input */}
             {mode === 'photo' && (
-              <div className="mb-4">
-                <label className="block text-xs font-medium text-slate-500 mb-1.5">
-                  {language === 'bn' ? 'ছবি আপলোড করুন' : 'Upload Image'}
+              <div className="mb-4 space-y-2.5">
+                <label className="block text-xs font-medium text-slate-500">
+                  {language === 'bn' ? 'ডিভাইস থেকে স্টোরি ছবি আপলোড করুন' : 'Upload Story Photo from Device'}
                 </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoSelect}
-                  className="block w-full text-xs text-slate-500"
-                />
+
+                {photoPreview ? (
+                  <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-900">
+                    <img
+                      src={photoPreview}
+                      alt="Selected story preview"
+                      className="w-full h-40 object-cover"
+                    />
+                    <div className="p-2 bg-black/70 backdrop-blur-xs flex items-center justify-between gap-2 text-white">
+                      <span className="text-[11px] font-medium truncate">
+                        📷 {photoFileName || (language === 'bn' ? 'নির্বাচিত ছবি' : 'Selected photo')}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <label className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-[11px] font-bold cursor-pointer">
+                          {language === 'bn' ? 'বদলান' : 'Change'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handlePhotoSelect}
+                            className="hidden"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPhotoPreview(null);
+                            setPhotoFileName(null);
+                          }}
+                          className="px-2 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-[11px] font-bold cursor-pointer"
+                        >
+                          {language === 'bn' ? 'মুছুন' : 'Remove'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center border-2 border-dashed border-blue-300 dark:border-blue-800 hover:border-blue-500 rounded-2xl p-5 bg-blue-50/50 dark:bg-slate-800/70 cursor-pointer transition-colors">
+                    <div className="w-11 h-11 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-2">
+                      <ImageIcon className="w-5 h-5" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-100 text-center">
+                      {isUploading
+                        ? language === 'bn'
+                          ? 'ছবি প্রস্তুত হচ্ছে...'
+                          : 'Preparing photo...'
+                        : language === 'bn'
+                        ? 'গ্যালারি থেকে ছবি বাছাই করুন'
+                        : 'Tap to choose a photo from gallery'}
+                    </span>
+                    <span className="text-[10px] text-slate-400 mt-1">JPG, PNG, WebP, GIF</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoSelect}
+                      className="hidden"
+                    />
+                  </label>
+                )}
               </div>
             )}
 
@@ -513,9 +579,7 @@ export const CreateStoryModal: React.FC = () => {
               type="button"
               onClick={handleSubmit}
               disabled={
-                isUploading ||
-                isUploadingCloudinary ||
-                (mode === 'text' ? !text.trim() : mode === 'photo' ? !photoPreview : !videoPreview)
+                mode === 'text' ? !text.trim() : mode === 'photo' ? !photoPreview : !videoPreview
               }
               className="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-sm font-semibold rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-2"
             >
@@ -524,8 +588,8 @@ export const CreateStoryModal: React.FC = () => {
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>
                     {language === 'bn'
-                      ? `আপলোড হচ্ছে (${cloudinaryProgress}%)...`
-                      : `Uploading Story (${cloudinaryProgress}%)...`}
+                      ? `সিংক হচ্ছে (${cloudinaryProgress}%)...`
+                      : `Syncing (${cloudinaryProgress}%)...`}
                   </span>
                 </>
               ) : (
@@ -536,7 +600,7 @@ export const CreateStoryModal: React.FC = () => {
         </div>
 
         {/* Right Side: Live Realistic Mobile Preview */}
-        <div className="w-full md:w-1/2 bg-slate-100 dark:bg-slate-950 p-6 flex flex-col items-center justify-center">
+        <div className="hidden md:flex w-full md:w-1/2 bg-slate-100 dark:bg-slate-950 p-6 flex-col items-center justify-center">
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
             {language === 'bn' ? 'লাইভ প্রিভিউ' : 'Live Preview'}
           </p>
@@ -571,11 +635,13 @@ export const CreateStoryModal: React.FC = () => {
                 className={`absolute inset-0 bg-gradient-to-br ${selectedGradient} flex items-center justify-center p-4`}
               />
             )}
-            <div className="relative z-10">
-              <p className="text-white font-bold text-sm drop-shadow-md leading-relaxed bg-black/30 backdrop-blur-xs px-2.5 py-1 rounded-xl">
-                {text || (language === 'bn' ? 'আপনার স্টোরি এখানে দেখাবে...' : 'Story preview...')}
-              </p>
-            </div>
+            {(text || mode === 'text') && (
+              <div className="relative z-10">
+                <p className="text-white font-bold text-sm drop-shadow-md leading-relaxed bg-black/30 backdrop-blur-xs px-2.5 py-1 rounded-xl">
+                  {text || (language === 'bn' ? 'আপনার স্টোরি এখানে দেখাবে...' : 'Story preview...')}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

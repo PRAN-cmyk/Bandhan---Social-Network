@@ -46,6 +46,7 @@ export const Navbar: React.FC = () => {
     conversations,
     openChatWith,
     contacts,
+    blockedUserIds,
     posts,
     groups,
     groupChats,
@@ -57,6 +58,7 @@ export const Navbar: React.FC = () => {
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchInput, setSearchInput] = useState('');
+  const [messengerSearch, setMessengerSearch] = useState('');
   const [isCloudinaryModalOpen, setIsCloudinaryModalOpen] = useState(false);
 
   // Local storage recent search history system
@@ -145,6 +147,22 @@ export const Navbar: React.FC = () => {
 
   const unreadNotifs = notifications.filter((n) => !n.isRead).length;
   const unreadMessages = Object.values(conversations).reduce((acc, c) => acc + (c.unreadCount || 0), 0);
+
+  const messengerContacts = Array.from(
+    new Map(
+      [...contacts, ...profiles]
+        .filter((u) => u && u.id && u.id !== currentUser?.id && !blockedUserIds.includes(u.id))
+        .map((u) => [u.id, u]),
+    ).values(),
+  ).filter((u) => {
+    const q = messengerSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      u.name.toLowerCase().includes(q) ||
+      (u.nameBn && u.nameBn.toLowerCase().includes(q)) ||
+      (u.username && u.username.toLowerCase().includes(q))
+    );
+  });
 
   // Filtered search results
   const searchResults = searchInput.trim()
@@ -669,60 +687,93 @@ export const Navbar: React.FC = () => {
                   </button>
                 </div>
 
+                {messengerTab === 'direct' && (
+                  <div className="relative mb-2">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={messengerSearch}
+                      onChange={(e) => setMessengerSearch(e.target.value)}
+                      placeholder={
+                        language === 'bn'
+                          ? 'মেসেজ করতে বন্ধুর নাম খুঁজুন...'
+                          : 'Search someone to message...'
+                      }
+                      className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder:text-slate-400"
+                    />
+                    {messengerSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setMessengerSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-1 max-h-72 overflow-y-auto">
                   {messengerTab === 'direct' ? (
-                    contacts.map((contact) => {
-                      const conv = conversations[contact.id];
-                      const lastMsg = conv?.messages[conv.messages.length - 1];
-                      const isOnline = contact.isOnline !== false;
-                      return (
-                        <button
-                          key={contact.id}
-                          onClick={() => {
-                            openChatWith(contact);
-                            setIsMessengerOpen(false);
-                          }}
-                          className="w-full flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-left transition-colors cursor-pointer"
-                        >
-                          <div className="relative shrink-0">
-                            <img
-                              src={contact.avatar}
-                              alt={contact.name}
-                              referrerPolicy="no-referrer"
-                              className="w-10 h-10 rounded-full object-cover"
-                            />
-                            <span
-                              className={`absolute bottom-0 right-0 w-3 h-3 border-2 border-white dark:border-slate-900 rounded-full ${
-                                isOnline ? 'bg-emerald-500' : 'bg-slate-400'
-                              }`}
-                            />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-1">
-                              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                                {language === 'bn' ? contact.nameBn || contact.name : contact.name}
-                              </p>
+                    messengerContacts.length > 0 ? (
+                      messengerContacts.map((contact) => {
+                        const conv = conversations[contact.id];
+                        const lastMsg = conv?.messages[conv.messages.length - 1];
+                        const isOnline = contact.isOnline !== false;
+                        return (
+                          <button
+                            key={contact.id}
+                            onClick={() => {
+                              openChatWith(contact);
+                              setIsMessengerOpen(false);
+                              setMessengerSearch('');
+                            }}
+                            className="w-full flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-left transition-colors cursor-pointer"
+                          >
+                            <div className="relative shrink-0">
+                              <img
+                                src={contact.avatar}
+                                alt={contact.name}
+                                referrerPolicy="no-referrer"
+                                className="w-10 h-10 rounded-full object-cover"
+                              />
                               <span
-                                className={`text-[10px] font-bold ${
-                                  isOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'
+                                className={`absolute bottom-0 right-0 w-3 h-3 border-2 border-white dark:border-slate-900 rounded-full ${
+                                  isOnline ? 'bg-emerald-500' : 'bg-slate-400'
                                 }`}
-                              >
-                                {isOnline
-                                  ? language === 'bn'
-                                    ? 'অনলাইন'
-                                    : 'Online'
-                                  : language === 'bn'
-                                  ? 'অফলাইন'
-                                  : 'Offline'}
-                              </span>
+                              />
                             </div>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                              {lastMsg ? lastMsg.text : t.activeNow}
-                            </p>
-                          </div>
-                        </button>
-                      );
-                    })
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1">
+                                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                                  {language === 'bn' ? contact.nameBn || contact.name : contact.name}
+                                </p>
+                                <span
+                                  className={`text-[10px] font-bold ${
+                                    isOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'
+                                  }`}
+                                >
+                                  {isOnline
+                                    ? language === 'bn'
+                                      ? 'অনলাইন'
+                                      : 'Online'
+                                    : language === 'bn'
+                                    ? 'অফলাইন'
+                                    : 'Offline'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                                {lastMsg ? lastMsg.text : t.activeNow}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <p className="text-xs text-slate-400 text-center py-4">
+                        {language === 'bn' ? 'কোনো ব্যবহারকারী পাওয়া যায়নি' : 'No contacts found'}
+                      </p>
+                    )
                   ) : (
                     groups.map((grp) => {
                       const grpMsgs = groupChats[grp.id] || [];

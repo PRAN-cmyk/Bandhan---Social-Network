@@ -83,9 +83,10 @@ export const StoryViewerModal: React.FC = () => {
     activeStory &&
       (activeStory.mediaType === 'video' ||
         activeStory.videoUrl ||
-        (activeStory.mediaUrl &&
+        (activeStory.mediaType !== 'image' &&
+          activeStory.mediaUrl &&
           (activeStory.mediaUrl.startsWith('data:video') ||
-            activeStory.mediaUrl.endsWith('.mp4')))),
+            /\.(mp4|webm|mov|m4v)(\?|$)/i.test(activeStory.mediaUrl)))),
   );
   const videoSrc = activeStory?.videoUrl || activeStory?.mediaUrl;
 
