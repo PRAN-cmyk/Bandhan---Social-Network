@@ -29,6 +29,30 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000,ht
 
 const safeIdRegex = /^[a-zA-Z0-9_\-]+$/;
 
+const isSafeUrl = (value: string): boolean => {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  const lower = trimmed.toLowerCase();
+  if (
+    lower.startsWith('javascript:') ||
+    lower.startsWith('vbscript:') ||
+    lower.startsWith('data:text/html')
+  ) {
+    return false;
+  }
+  return (
+    lower.startsWith('https://') ||
+    lower.startsWith('http://') ||
+    lower.startsWith('data:image/') ||
+    lower.startsWith('data:video/') ||
+    lower.startsWith('blob:') ||
+    lower.startsWith('/')
+  );
+};
+
+const safeUrlField = (maxLen = 500000) =>
+  z.string().trim().max(maxLen).refine(isSafeUrl, 'Unsafe URL scheme is not allowed');
+
 const postSchema = z.object({
   clientPostId: z
     .string()
@@ -42,17 +66,17 @@ const postSchema = z.object({
     .min(1, 'Post content cannot be empty')
     .max(10000, 'Post content exceeds 10,000 characters limit'),
   privacy: z.enum(['public', 'friends', 'only_me']).default('public'),
-  mediaUrl: z.string().trim().max(500000).nullable().optional(),
+  mediaUrl: safeUrlField(500000).nullable().optional(),
   mediaType: z.enum(['image', 'video', 'text']).nullable().optional(),
-  meetUri: z.string().trim().max(1000).nullable().optional(),
+  meetUri: safeUrlField(1000).nullable().optional(),
   authorName: z.string().trim().max(200).optional(),
-  authorAvatar: z.string().trim().max(500000).optional(),
+  authorAvatar: safeUrlField(500000).optional(),
 });
 
 const meetingSchema = z.object({
   spaceName: z.string().trim().max(200).default('spaces/instant'),
   meetingCode: z.string().trim().max(200).default(''),
-  meetingUri: z.string().trim().min(1, 'Meeting URI is required').max(2000),
+  meetingUri: safeUrlField(2000).refine((v) => v.length > 0, 'Meeting URI is required'),
   title: z.string().trim().max(300).default('Bandhan Video Meeting'),
 });
 
@@ -60,8 +84,8 @@ export const albumSchema = z.object({
   title: z.string().trim().min(1, 'Album title is required').max(150),
   titleBn: z.string().trim().max(150).optional(),
   description: z.string().trim().max(1000).optional(),
-  coverUrl: z.string().trim().max(500000).optional(),
-  photos: z.array(z.string().trim().max(500000)).default([]),
+  coverUrl: safeUrlField(500000).optional(),
+  photos: z.array(safeUrlField(500000)).default([]),
 });
 
 async function startServer() {
@@ -99,7 +123,7 @@ async function startServer() {
           return;
         }
 
-        callback(null, true);
+        callback(new Error('Origin not allowed by CORS'));
       },
       credentials: true,
     }),

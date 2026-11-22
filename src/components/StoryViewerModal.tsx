@@ -18,6 +18,8 @@ import {
   Plus,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { SmartVideo } from './SmartVideo';
+import { SmartImage } from './SmartImage';
 
 interface FloatingParticle {
   id: string;
@@ -392,16 +394,14 @@ export const StoryViewerModal: React.FC = () => {
 
         {/* Story Background: Video, Image, or Gradient */}
         {isVideoStory && videoSrc ? (
-          <video
+          <SmartVideo
             ref={videoRef}
             src={videoSrc}
             autoPlay
             playsInline
             preload="metadata"
             muted={isMuted}
-            onError={() => {
-              setTimeout(() => advanceToNextStory(), 3500);
-            }}
+            language={language}
             onTimeUpdate={(e) => {
               const vid = e.currentTarget;
               if (vid.duration && vid.duration > 0) {
@@ -409,13 +409,15 @@ export const StoryViewerModal: React.FC = () => {
               }
             }}
             onEnded={advanceToNextStory}
-            className="absolute inset-0 w-full h-full object-cover"
+            containerClassName="absolute inset-0 w-full h-full bg-slate-950"
+            className="w-full h-full object-cover"
           />
         ) : activeStory.mediaUrl ? (
-          <img
+          <SmartImage
             src={activeStory.mediaUrl}
             alt="Story"
-            referrerPolicy="no-referrer"
+            fallbackType="media"
+            fallbackLabel={activeStory.author.name}
             className="absolute inset-0 w-full h-full object-cover"
           />
         ) : (
@@ -501,10 +503,11 @@ export const StoryViewerModal: React.FC = () => {
           {/* Author metadata & Top Controls */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <img
+              <SmartImage
                 src={activeStory.author.avatar}
                 alt={activeStory.author.name}
-                referrerPolicy="no-referrer"
+                fallbackType="avatar"
+                fallbackLabel={activeStory.author.name}
                 className="w-10 h-10 rounded-full border-2 border-blue-500 object-cover shadow-md"
               />
               <div>
@@ -970,10 +973,11 @@ export const StoryViewerModal: React.FC = () => {
                   >
                     <div className="flex items-center gap-2.5">
                       <div className="relative">
-                        <img
+                        <SmartImage
                           src={item.userAvatar}
                           alt={item.userName}
-                          referrerPolicy="no-referrer"
+                          fallbackType="avatar"
+                          fallbackLabel={item.userName}
                           className="w-9 h-9 rounded-full object-cover border border-white/20"
                         />
                         <span className="absolute -bottom-1 -right-1 text-sm bg-slate-900 rounded-full px-0.5">

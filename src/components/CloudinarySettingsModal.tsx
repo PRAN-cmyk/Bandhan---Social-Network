@@ -33,7 +33,6 @@ export const CloudinarySettingsModal: React.FC<CloudinarySettingsModalProps> = (
 
   const [cloudName, setCloudName] = useState(initialConfig.cloudName);
   const [uploadPreset, setUploadPreset] = useState(initialConfig.uploadPreset);
-  const [apiKey, setApiKey] = useState(initialConfig.apiKey || '');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
@@ -52,7 +51,7 @@ export const CloudinarySettingsModal: React.FC<CloudinarySettingsModalProps> = (
       );
       return;
     }
-    saveCloudinaryConfig(cloudName.trim(), uploadPreset.trim(), apiKey.trim());
+    saveCloudinaryConfig(cloudName.trim(), uploadPreset.trim());
     showToast(
       language === 'bn'
         ? 'ক্লাউডিনারি কনফিগারেশন সফলভাবে সংরক্ষিত হয়েছে!'
@@ -66,7 +65,6 @@ export const CloudinarySettingsModal: React.FC<CloudinarySettingsModalProps> = (
     const defaults = getCloudinaryConfig();
     setCloudName(defaults.cloudName);
     setUploadPreset(defaults.uploadPreset);
-    setApiKey('');
     setTestResult(null);
     showToast(
       language === 'bn'
@@ -259,17 +257,13 @@ export const CloudinarySettingsModal: React.FC<CloudinarySettingsModalProps> = (
               </p>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                {language === 'bn' ? 'ঐচ্ছিক এপিআই কি (API Key - Optional)' : 'API Key (Optional)'}
-              </label>
-              <input
-                type="text"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Optional"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-[11px] text-emerald-900 dark:text-emerald-200 flex items-start gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <span>
+                {language === 'bn'
+                  ? 'নিরাপত্তা নোট: Unsigned Upload Preset ব্যবহার করলে ব্রাউজারে বা গিটহাবে কোনো গোপন API Key/Secret রাখার প্রয়োজন হয় না, ফলে কেউ আপনার API চুরি করতে পারবে না।'
+                  : 'Security Note: Unsigned upload presets never store any API Key or Secret in browser storage or GitHub code.'}
+              </span>
             </div>
 
             {/* Quick Action Buttons */}

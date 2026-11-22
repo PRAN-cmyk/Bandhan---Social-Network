@@ -115,6 +115,8 @@ export interface Post {
   expiresAt?: string; // ISO date string when post self-destructs
   selfDestructDuration?: number; // duration in minutes
   poll?: PollData;
+  musicTitle?: string;
+  audioUrl?: string;
 }
 
 export interface PollOption {
@@ -224,6 +226,7 @@ export interface ChatMessage {
   senderId: string;
   text: string;
   mediaUrl?: string;
+  mediaType?: 'image' | 'video';
   audioUrl?: string;
   audioDuration?: number;
   timestamp: string;

@@ -8,8 +8,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default defineConfig(() => {
-  const rawBase = process.env.GITHUB_PAGES_BASE;
-  const base = rawBase ? `${rawBase.replace(/\/+$/, '')}/` : '/';
+  const rawBase = process.env.GITHUB_PAGES_BASE?.trim();
+  const base = rawBase ? `${rawBase.replace(/\/+$/, '')}/` : './';
 
   return {
     base,

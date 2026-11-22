@@ -33,6 +33,7 @@ import { CallModal } from './components/CallModal';
 import { AccountSecurityModal } from './components/AccountSecurityModal';
 import { AuthScreen } from './components/AuthScreen';
 import { AdBannerSlot } from './components/AdBannerSlot';
+import { SmartImage } from './components/SmartImage';
 import { createAvatarUrl } from './data/mockData';
 import { Post } from './types';
 import {
@@ -291,22 +292,22 @@ const MainContent: React.FC = () => {
 
                   {/* WELCOME friend Hero Logo Banner (কেউ প্রথম ওয়েবসাইটে ঢুকলে দেখানোর জন্য) */}
                   {showWelcomeBanner && (
-                    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-4 sm:p-5 text-white shadow-xl shadow-blue-500/20 mb-4 border border-white/20 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-3.5 sm:p-5 text-white shadow-xl shadow-blue-500/20 mb-4 border border-white/20 animate-in fade-in slide-in-from-top-2 duration-300">
                       <div className="absolute -right-8 -bottom-8 w-44 h-44 rounded-full bg-white/10 blur-2xl pointer-events-none" />
                       <div className="absolute right-1/3 -top-10 w-36 h-36 rounded-full bg-pink-500/20 blur-xl pointer-events-none" />
 
                       <div className="relative flex items-start sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="flex items-center gap-3 min-w-0">
                           {/* Logo Icon with greeting handshake */}
-                          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-2xl sm:text-3xl shadow-inner border border-white/30 shrink-0">
+                          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-xl sm:text-3xl shadow-inner border border-white/30 shrink-0">
                             🤝
                           </div>
                           <div>
-                            <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[11px] font-black uppercase tracking-wider backdrop-blur-sm mb-1">
+                            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/20 text-white text-[10px] sm:text-[11px] font-black uppercase tracking-wider backdrop-blur-sm mb-1">
                               <span>✨</span>
                               <span>WELCOME friend</span>
                             </div>
-                            <h2 className="text-lg sm:text-xl font-black tracking-tight leading-snug">
+                            <h2 className="text-base sm:text-xl font-black tracking-tight leading-snug">
                               {language === 'bn'
                                 ? 'স্বাগতম প্রিয় বন্ধু — বন্ধন সোশ্যাল প্ল্যাটফর্মে!'
                                 : 'WELCOME friend — Welcome to Bandhan Social!'}
@@ -497,10 +498,11 @@ const MainContent: React.FC = () => {
                                   key={person.id}
                                   className="shrink-0 w-44 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-slate-50/60 dark:bg-slate-800/50 flex flex-col"
                                 >
-                                  <img
+                                  <SmartImage
                                     src={person.avatar}
                                     alt={person.name}
-                                    referrerPolicy="no-referrer"
+                                    fallbackType="avatar"
+                                    fallbackLabel={person.name}
                                     onClick={() => viewUserProfile(person)}
                                     className="w-full h-32 object-cover cursor-pointer hover:opacity-95 transition-opacity"
                                   />
@@ -700,7 +702,7 @@ const MainContent: React.FC = () => {
 
       {/* Ergonomic Mobile Bottom Tab Bar (< md screens) */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 pb-safe">
-        <div className="grid grid-cols-6 items-center h-14">
+        <div className="grid grid-cols-6 items-center h-13">
           <button
             onClick={() => setActiveTab('feed')}
             className={`min-h-[44px] flex flex-col items-center justify-center cursor-pointer ${

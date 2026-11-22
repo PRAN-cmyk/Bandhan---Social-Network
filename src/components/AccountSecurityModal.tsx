@@ -33,6 +33,11 @@ import {
   ShieldAlert,
   HelpCircle,
   ExternalLink,
+  Cloud,
+  MessageSquare,
+  Maximize2,
+  RefreshCw,
+  Database,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ThemeMode } from '../types';
@@ -41,6 +46,9 @@ import {
   generateSecureTotpSecret,
   generateSecureRecoveryCodes,
 } from '../utils/security';
+import { CloudinarySettingsModal } from './CloudinarySettingsModal';
+import { getCloudinaryConfig } from '../utils/cloudinary';
+import { SmartImage } from './SmartImage';
 
 export const AccountSecurityModal: React.FC = () => {
   const {
@@ -71,6 +79,10 @@ export const AccountSecurityModal: React.FC = () => {
     contacts,
     profiles,
     sendPasswordReset,
+    appScale,
+    setAppScale,
+    cloudSyncStatus,
+    forceCloudResync,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<
@@ -84,6 +96,7 @@ export const AccountSecurityModal: React.FC = () => {
   const [showConfirmPin, setShowConfirmPin] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [showDisable2FAConfirm, setShowDisable2FAConfirm] = useState(false);
 
   // 2FA State (Encrypted & Persistent via secureStorage)
   const [is2FAEnabled, setIs2FAEnabled] = useState<boolean>(() =>
@@ -106,7 +119,7 @@ export const AccountSecurityModal: React.FC = () => {
   // Activity Log Filter
   const [activityFilter, setActivityFilter] = useState<'all' | 'login' | 'security' | 'post' | 'settings'>('all');
 
-  // Notification Sound Preference
+  // Notification Sound & Messenger Privacy Preferences
   const [notifSoundEnabled, setNotifSoundEnabled] = useState<boolean>(() => {
     try {
       return localStorage.getItem('bandhan_notif_sound') !== 'false';
@@ -114,6 +127,22 @@ export const AccountSecurityModal: React.FC = () => {
       return true;
     }
   });
+  const [typingIndicatorEnabled, setTypingIndicatorEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('bandhan_pref_typing') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const [readReceiptsEnabled, setReadReceiptsEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('bandhan_pref_read_receipts') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const [isCloudinaryModalOpen, setIsCloudinaryModalOpen] = useState(false);
+  const cloudinaryConfig = getCloudinaryConfig();
 
   // Authentic Current Device Session Info (no fake remote IPs/devices)
   const [sessions, setSessions] = useState(() => {
@@ -226,14 +255,8 @@ export const AccountSecurityModal: React.FC = () => {
   };
 
   const handleDisable2FA = () => {
-    const confirmed = window.confirm(
-      language === 'bn'
-        ? 'আপনি কি নিশ্চিত যে টু-ফ্যাক্টর অথেনটিকেশন (২এফএ) বন্ধ করতে চান?'
-        : 'Are you sure you want to disable Two-Factor Authentication (2FA)?'
-    );
-    if (!confirmed) return;
-
     setIs2FAEnabled(false);
+    setShowDisable2FAConfirm(false);
     secureStorage.set('bandhan_2fa_enabled', false);
     addActivityLog({
       type: 'security',
@@ -328,10 +351,10 @@ export const AccountSecurityModal: React.FC = () => {
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl max-h-[94dvh] sm:max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 sm:px-7 py-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between px-4 sm:px-7 py-3 sm:py-4 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
               <ShieldCheck className="w-5 h-5" />
@@ -582,6 +605,77 @@ export const AccountSecurityModal: React.FC = () => {
                   </button>
                 </div>
               </div>
+
+              {/* App / Mobile Display Scale Selector (WebView/APK & Mobile Sizing Control) */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 space-y-4">
+                <div>
+                  <h4 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <Maximize2 className="w-4 h-4 text-indigo-500" />
+                    <span>
+                      {language === 'bn'
+                        ? 'অ্যাপ ও মোবাইল ডিসপ্লে স্কেল (App Scale)'
+                        : 'App & Mobile Display Scale'}
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {language === 'bn'
+                      ? 'অ্যাপ বা মোবাইলে সব লেখা ও কার্ড বেশি বড় মনে হলে কম্প্যাক্ট (Compact) বা অটো নির্বাচন করুন (ডেস্কটপ ওয়েবসাইট অপরিবর্তিত থাকবে)'
+                      : 'Controls font & layout density on mobile & WebView apps while keeping desktop layout unchanged.'}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                  {(
+                    [
+                      {
+                        id: 'auto',
+                        labelBn: 'অটো (সুপারিশকৃত)',
+                        labelEn: 'Auto (Recommended)',
+                        descBn: 'অ্যাপে স্মার্ট ফিট',
+                        descEn: 'Smart fit on app',
+                      },
+                      {
+                        id: 'compact',
+                        labelBn: 'কম্প্যাক্ট (ছোট)',
+                        labelEn: 'Compact',
+                        descBn: 'অধিক কন্টেন্ট দৃশ্যমান',
+                        descEn: 'Fits more on screen',
+                      },
+                      {
+                        id: 'normal',
+                        labelBn: 'স্বাভাবিক (১০০%)',
+                        labelEn: 'Standard (100%)',
+                        descBn: 'ডিফল্ট সাইজ',
+                        descEn: 'Default size',
+                      },
+                    ] as const
+                  ).map((opt) => {
+                    const selected = appScale === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          setAppScale(opt.id);
+                          showToast(
+                            language === 'bn'
+                              ? `ডিসপ্লে স্কেল "${opt.labelBn}" সেট করা হয়েছে`
+                              : `Display scale set to ${opt.labelEn}`,
+                          );
+                        }}
+                        className={`flex flex-col items-center text-center p-3 rounded-2xl border transition-all cursor-pointer ${
+                          selected
+                            ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-500 ring-2 ring-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-bold'
+                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 hover:border-slate-300 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        <span className="text-xs font-extrabold">{language === 'bn' ? opt.labelBn : opt.labelEn}</span>
+                        <span className="text-[10px] opacity-75 mt-0.5">{language === 'bn' ? opt.descBn : opt.descEn}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
 
@@ -632,10 +726,27 @@ export const AccountSecurityModal: React.FC = () => {
                         <QrCode className="w-4 h-4" />
                         <span>{language === 'bn' ? '২এফএ সেটআপ করুন' : 'Setup 2FA'}</span>
                       </button>
+                    ) : showDisable2FAConfirm ? (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={handleDisable2FA}
+                          className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold cursor-pointer"
+                        >
+                          {language === 'bn' ? 'হ্যাঁ, বন্ধ করুন' : 'Confirm Disable'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowDisable2FAConfirm(false)}
+                          className="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold cursor-pointer"
+                        >
+                          {language === 'bn' ? 'বাতিল' : 'Cancel'}
+                        </button>
+                      </div>
                     ) : (
                       <button
                         type="button"
-                        onClick={handleDisable2FA}
+                        onClick={() => setShowDisable2FAConfirm(true)}
                         className="px-4 py-2 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/80 rounded-xl text-xs font-bold transition-all cursor-pointer"
                       >
                         {language === 'bn' ? '২এফএ বন্ধ করুন' : 'Disable 2FA'}
@@ -827,17 +938,10 @@ export const AccountSecurityModal: React.FC = () => {
                           maxLength={6}
                           value={verificationCode}
                           onChange={(e) => setVerificationCode(e.target.value.replace(/[^0-9]/g, ''))}
-                          placeholder="482910"
+                          placeholder="000000"
                           className="w-48 px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-indigo-500/40 focus:border-indigo-600 text-center text-lg font-mono font-black tracking-widest text-slate-900 dark:text-slate-100 focus:outline-none"
                           autoFocus
                         />
-                        <button
-                          type="button"
-                          onClick={() => setVerificationCode('582194')}
-                          className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-200 cursor-pointer"
-                        >
-                          {language === 'bn' ? 'অটো-ফিল ডেমো কোড' : 'Auto-fill Demo Code'}
-                        </button>
                         <span className="text-xs text-slate-400 font-mono">
                           ⏱ {timerCount}s
                         </span>
@@ -1168,6 +1272,96 @@ export const AccountSecurityModal: React.FC = () => {
                 </button>
               </div>
 
+              {/* Messenger Privacy Controls */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 space-y-3">
+                <h5 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-blue-600" />
+                  <span>{language === 'bn' ? 'মেসেঞ্জার প্রাইভেসি নিয়ন্ত্রণ' : 'Messenger Privacy Controls'}</span>
+                </h5>
+
+                <div className="flex items-center justify-between gap-3 pt-1">
+                  <div>
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      {language === 'bn' ? 'টাইপিং ইন্ডিকেটর দেখান' : 'Show Typing Indicator'}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {language === 'bn'
+                        ? 'মেসেজ লেখার সময় অপর প্রান্তে "লিখছেন..." দেখাবে।'
+                        : 'Let recipients see when you are typing in real time.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !typingIndicatorEnabled;
+                      setTypingIndicatorEnabled(next);
+                      try {
+                        localStorage.setItem('bandhan_pref_typing', String(next));
+                      } catch {}
+                      window.dispatchEvent(new Event('bandhan-prefs-updated'));
+                      showToast(
+                        next
+                          ? language === 'bn'
+                            ? 'টাইপিং ইন্ডিকেটর চালু হয়েছে'
+                            : 'Typing indicator enabled'
+                          : language === 'bn'
+                          ? 'টাইপিং ইন্ডিকেটর বন্ধ করা হয়েছে'
+                          : 'Typing indicator hidden',
+                      );
+                    }}
+                    className={`rounded-xl transition-colors cursor-pointer text-xs font-bold px-3 py-1.5 shrink-0 ${
+                      typingIndicatorEnabled
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                        : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {typingIndicatorEnabled ? (language === 'bn' ? 'চালু' : 'On') : (language === 'bn' ? 'বন্ধ' : 'Off')}
+                  </button>
+                </div>
+
+                <div className="h-px bg-slate-200/70 dark:bg-slate-700/70" />
+
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      {language === 'bn' ? 'রিড রিসিপ্ট (Seen) পাঠান' : 'Send Read Receipts'}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {language === 'bn'
+                        ? 'আপনি মেসেজ দেখলে প্রেরকের কাছে Seen নিশ্চিতকরণ যাবে।'
+                        : 'Notify senders when you read their messages.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !readReceiptsEnabled;
+                      setReadReceiptsEnabled(next);
+                      try {
+                        localStorage.setItem('bandhan_pref_read_receipts', String(next));
+                      } catch {}
+                      window.dispatchEvent(new Event('bandhan-prefs-updated'));
+                      showToast(
+                        next
+                          ? language === 'bn'
+                            ? 'রিড রিসিপ্ট চালু হয়েছে'
+                            : 'Read receipts enabled'
+                          : language === 'bn'
+                          ? 'রিড রিসিপ্ট বন্ধ করা হয়েছে'
+                          : 'Read receipts disabled',
+                      );
+                    }}
+                    className={`rounded-xl transition-colors cursor-pointer text-xs font-bold px-3 py-1.5 shrink-0 ${
+                      readReceiptsEnabled
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                        : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {readReceiptsEnabled ? (language === 'bn' ? 'চালু' : 'On') : (language === 'bn' ? 'বন্ধ' : 'Off')}
+                  </button>
+                </div>
+              </div>
+
               {/* Blocked Accounts Manager */}
               <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 space-y-3">
                 <div className="flex items-center justify-between">
@@ -1195,9 +1389,11 @@ export const AccountSecurityModal: React.FC = () => {
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
                             {foundUser?.avatar ? (
-                              <img
+                              <SmartImage
                                 src={foundUser.avatar}
                                 alt={foundUser.name}
+                                fallbackType="avatar"
+                                fallbackLabel={foundUser.name}
                                 className="w-8 h-8 rounded-full object-cover"
                               />
                             ) : (
@@ -1315,6 +1511,118 @@ export const AccountSecurityModal: React.FC = () => {
                   </button>
                 </div>
               )}
+
+              {/* Cloud Media & Live Deployment API Protection Card */}
+              <div className="bg-gradient-to-br from-slate-50 to-blue-50/70 dark:from-slate-800/70 dark:to-blue-950/30 rounded-2xl p-5 border border-blue-200/80 dark:border-blue-900/60 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h5 className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <Cloud className="w-4 h-4 text-blue-600" />
+                      <span>
+                        {language === 'bn'
+                          ? 'ক্লাউড মিডিয়া ও লাইভ ডোমেইন সুরক্ষা'
+                          : 'Cloud Media & Live API Protection'}
+                      </span>
+                    </h5>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      {language === 'bn'
+                        ? `সক্রিয় ক্লাউডিনারি প্রিসেট: ${cloudinaryConfig.cloudName} / ${cloudinaryConfig.uploadPreset}`
+                        : `Active Cloudinary Preset: ${cloudinaryConfig.cloudName} / ${cloudinaryConfig.uploadPreset}`}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsCloudinaryModalOpen(true)}
+                    className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold cursor-pointer shrink-0 flex items-center gap-1.5"
+                  >
+                    <Cloud className="w-3.5 h-3.5" />
+                    <span>{language === 'bn' ? 'ক্লাউডিনারি সেটিংস' : 'Cloudinary Setup'}</span>
+                  </button>
+                </div>
+
+                <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-700/80 text-[11px] text-slate-600 dark:text-slate-300 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-800 dark:text-slate-200">
+                      {language === 'bn' ? 'বর্তমান হোস্ট ডোমেইন:' : 'Active Host Domain:'}
+                    </span>
+                    <code className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-blue-600 dark:text-blue-400">
+                      {typeof window !== 'undefined' ? window.location.hostname : 'localhost'}
+                    </code>
+                  </div>
+                  <p>
+                    {language === 'bn'
+                      ? '• ব্রাউজারে কোনো API সিক্রেট সংরক্ষণ করা হয় না; কেবল Unsigned Upload Preset ব্যবহৃত হয়।'
+                      : '• No private API keys or secrets are stored in client storage; only unsigned upload presets are used.'}
+                  </p>
+                  <p>
+                    {language === 'bn'
+                      ? '• GitHub Pages লাইভের জন্য Firebase Authorized Domains ও Google Cloud HTTP Referrer লক চালু রাখুন।'
+                      : '• Keep Firebase Authorized Domains & Google Cloud HTTP Referrer restrictions active for GitHub Pages.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Firebase Cloud Sync Diagnostics & Resync */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h5 className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <Database className="w-4 h-4 text-emerald-600" />
+                      <span>
+                        {language === 'bn'
+                          ? 'ফায়ারবেস ক্লাউড সিংক স্ট্যাটাস ও ডায়াগনস্টিকস'
+                          : 'Firebase Cloud Sync & Diagnostics'}
+                      </span>
+                    </h5>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      {cloudSyncStatus.isConnected
+                        ? language === 'bn'
+                          ? '● ফায়ারবেস ক্লাউডের সাথে রিয়েল-টাইমে যুক্ত আছে'
+                          : '● Connected to Firebase Cloud in real time'
+                        : language === 'bn'
+                        ? 'অফলাইন বা গেস্ট মোডে চলছে — সব আইডিতে দেখতে সাইন-ইন করুন'
+                        : 'Local mode — sign in with Google or Email to sync across devices'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={forceCloudResync}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer shrink-0 flex items-center gap-1.5"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>{language === 'bn' ? 'পুনরায় সিংক করুন' : 'Force Resync'}</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/80">
+                    <span className="text-slate-400 block">Project / Database</span>
+                    <span className="font-mono font-bold text-slate-800 dark:text-slate-200 break-all">
+                      {cloudSyncStatus.diagnostics.projectId || '—'} • {cloudSyncStatus.diagnostics.databaseId}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/80">
+                    <span className="text-slate-400 block">
+                      {language === 'bn' ? 'সক্রিয় ক্লাউড অ্যাকাউন্ট' : 'Active Cloud Account'}
+                    </span>
+                    <span className="font-mono font-bold text-slate-800 dark:text-slate-200 truncate block">
+                      {cloudSyncStatus.diagnostics.email || cloudSyncStatus.diagnostics.uid || 'Guest'}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/80 sm:col-span-2 flex items-center justify-between">
+                    <span className="text-slate-500">
+                      {language === 'bn' ? 'সর্বশেষ ক্লাউড সিংক:' : 'Last Cloud Sync:'}
+                    </span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                      {cloudSyncStatus.lastSyncAt
+                        ? new Date(cloudSyncStatus.lastSyncAt).toLocaleTimeString()
+                        : language === 'bn'
+                        ? 'অপেক্ষমাণ'
+                        : 'Pending'}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1467,6 +1775,10 @@ export const AccountSecurityModal: React.FC = () => {
           )}
         </div>
       </div>
+      <CloudinarySettingsModal
+        isOpen={isCloudinaryModalOpen}
+        onClose={() => setIsCloudinaryModalOpen(false)}
+      />
     </div>
   );
 };

@@ -15,6 +15,8 @@ import { fileToDataUrl } from '../utils/storage';
 import { uploadMediaToCloudinary, isVideoFile as checkIsVideoFile } from '../utils/cloudinary';
 import { CloudinarySettingsModal } from './CloudinarySettingsModal';
 import { createAvatarUrl } from '../data/mockData';
+import { SmartVideo } from './SmartVideo';
+import { SmartImage } from './SmartImage';
 
 const SAMPLE_REEL_VIDEOS = [
   {
@@ -102,23 +104,38 @@ export const CreateReelModal: React.FC = () => {
         onProgress: (p) => setCloudinaryProgress(p),
       });
 
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
       if (isVid) {
         setVideoUrl(result.secureUrl);
-        showToast(
-          language === 'bn'
-            ? `ক্লাউডিনারি ফ্রি-টিয়ার: রিল ভিডিও (${(file.size / (1024 * 1024)).toFixed(1)} MB) সফলভাবে সিডিএন-এ আপলোড হয়েছে!`
-            : `Cloudinary Free Tier: Reel video (${(file.size / (1024 * 1024)).toFixed(1)} MB) uploaded to fast CDN!`,
-        );
       } else {
         setPosterUrl(result.secureUrl);
         setVideoUrl(undefined);
+      }
+
+      if (result.storageMode === 'cloudinary') {
         showToast(
           language === 'bn'
-            ? 'ক্লাউডিনারি সিডিএন-এ ছবি সফলভাবে আপলোড হয়েছে!'
+            ? isVid
+              ? `ক্লাউডিনারি ফ্রি-টিয়ার: রিল ভিডিও (${sizeMb} MB) সফলভাবে সিডিএন-এ আপলোড হয়েছে!`
+              : 'ক্লাউডিনারি সিডিএন-এ ছবি সফলভাবে আপলোড হয়েছে!'
+            : isVid
+            ? `Cloudinary Free Tier: Reel video (${sizeMb} MB) uploaded to fast CDN!`
             : 'Photo uploaded to Cloudinary Free CDN!',
         );
+      } else if (result.storageMode === 'firebase') {
+        showToast(
+          language === 'bn'
+            ? `ফায়ারবেস ক্লাউডে রিল (${sizeMb} MB) আপলোড হয়েছে!`
+            : `Reel (${sizeMb} MB) uploaded to Firebase cloud storage!`,
+        );
+      } else {
+        showToast(
+          language === 'bn'
+            ? 'ক্লাউডিনারি ব্যর্থ হয়ে রিল লোকাল ড্রাইভে সেভ হয়েছে। লাইভে দেখাতে ক্লাউডিনারি সেটিংস যাচাই করুন।'
+            : 'Reel saved locally on this device — check Cloudinary Settings to stream on live site.',
+        );
       }
-      setVideoPreviewName(`${file.name} (${(file.size / (1024 * 1024)).toFixed(1)} MB)`);
+      setVideoPreviewName(`${file.name} (${sizeMb} MB)`);
     } catch {
       const fallbackUrl = await fileToDataUrl(file);
       if (isVid) {
@@ -279,9 +296,11 @@ export const CreateReelModal: React.FC = () => {
                         : 'border-slate-200 dark:border-slate-800 hover:border-slate-400'
                     }`}
                   >
-                    <img
+                    <SmartImage
                       src={sample.poster}
                       alt={sample.title}
+                      fallbackType="media"
+                      fallbackLabel={sample.title}
                       className="w-10 h-10 rounded-lg object-cover"
                     />
                     <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 line-clamp-2 leading-tight">
@@ -410,19 +429,23 @@ export const CreateReelModal: React.FC = () => {
           </p>
           <div className="w-52 aspect-[9/15] rounded-3xl overflow-hidden shadow-2xl relative border-2 border-slate-700 flex flex-col justify-between bg-black">
             {videoUrl ? (
-              <video
+              <SmartVideo
                 src={videoUrl}
                 poster={posterUrl}
                 autoPlay
                 loop
                 muted
                 playsInline
-                className="absolute inset-0 w-full h-full object-cover"
+                language={language}
+                containerClassName="absolute inset-0 w-full h-full bg-black"
+                className="w-full h-full object-cover"
               />
             ) : (
-              <img
+              <SmartImage
                 src={posterUrl}
                 alt="Preview poster"
+                fallbackType="media"
+                fallbackLabel="Reel preview"
                 className="absolute inset-0 w-full h-full object-cover"
               />
             )}
@@ -440,9 +463,11 @@ export const CreateReelModal: React.FC = () => {
             {/* Reel info bottom */}
             <div className="relative z-10 p-3 space-y-1.5 text-white">
               <div className="flex items-center gap-1.5">
-                <img
+                <SmartImage
                   src={currentUser?.avatar || createAvatarUrl(currentUser?.name || 'User', '#1877F2', '#ffffff')}
                   alt={currentUser?.name || 'User'}
+                  fallbackType="avatar"
+                  fallbackLabel={currentUser?.name || 'User'}
                   className="w-6 h-6 rounded-full border border-white/50 object-cover"
                 />
                 <span className="text-xs font-bold truncate">{currentUser?.name || 'User'}</span>

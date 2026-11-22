@@ -31,6 +31,8 @@ import { CloudinarySettingsModal } from './CloudinarySettingsModal';
 import { PollData } from '../types';
 import { fileToDataUrl } from '../utils/storage';
 import { uploadMediaToCloudinary, isVideoFile as checkIsVideoFile } from '../utils/cloudinary';
+import { SmartVideo } from './SmartVideo';
+import { SmartImage } from './SmartImage';
 
 const POPULAR_LOCATIONS = [
   'Dhaka, Bangladesh',
@@ -98,6 +100,7 @@ export const CreatePostBox: React.FC<CreatePostBoxProps> = ({ groupId, groupName
   const [isCloudinaryModalOpen, setIsCloudinaryModalOpen] = useState(false);
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [storageNotice, setStorageNotice] = useState<'cloudinary' | 'firebase' | 'inline-cloud' | 'local' | null>(null);
 
   const setQuickSchedule = (hoursAhead: number) => {
     const d = new Date(Date.now() + hoursAhead * 60 * 60 * 1000);
@@ -144,19 +147,40 @@ export const CreatePostBox: React.FC<CreatePostBoxProps> = ({ groupId, groupName
         onProgress: (percent) => setUploadProgress(percent),
       });
 
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      setStorageNotice(uploadResult.storageMode);
+
       if (isVid) {
         setVideoPreview(uploadResult.secureUrl);
-        showToast(
-          language === 'bn'
-            ? `ক্লাউডিনারি ফ্রি-টিয়ার: ভিডিও (${(file.size / (1024 * 1024)).toFixed(1)} MB) সফলভাবে সিডিএন-এ আপলোড হয়েছে!`
-            : `Cloudinary Free Tier: Video (${(file.size / (1024 * 1024)).toFixed(1)} MB) uploaded to CDN!`,
-        );
       } else {
         setPhotoPreview(uploadResult.secureUrl);
+      }
+
+      if (uploadResult.storageMode === 'cloudinary') {
         showToast(
           language === 'bn'
-            ? 'ক্লাউডিনারি সিডিএন-এ ছবি সফলভাবে আপলোড হয়েছে!'
+            ? isVid
+              ? `ক্লাউডিনারি ফ্রি-টিয়ার: ভিডিও (${sizeMb} MB) সফলভাবে সিডিএন-এ আপলোড হয়েছে!`
+              : 'ক্লাউডিনারি সিডিএন-এ ছবি সফলভাবে আপলোড হয়েছে!'
+            : isVid
+            ? `Cloudinary Free Tier: Video (${sizeMb} MB) uploaded to CDN!`
             : 'Photo uploaded to Cloudinary Free CDN!',
+        );
+      } else if (uploadResult.storageMode === 'firebase') {
+        showToast(
+          language === 'bn'
+            ? isVid
+              ? `ফায়ারবেস ক্লাউডে ভিডিও (${sizeMb} MB) আপলোড হয়েছে!`
+              : 'ফায়ারবেস ক্লাউডে ছবি আপলোড হয়েছে!'
+            : isVid
+            ? `Video (${sizeMb} MB) uploaded to Firebase cloud storage!`
+            : 'Photo uploaded to Firebase cloud storage!',
+        );
+      } else {
+        showToast(
+          language === 'bn'
+            ? 'ক্লাউড আপলোড ব্যর্থ হয়ে লোকাল ব্রাউজারে সেভ হয়েছে — লাইভ শেয়ারের জন্য ক্লাউডিনারি সেটআপ করুন।'
+            : 'Saved locally on this browser — configure Cloudinary Settings to stream across devices.',
         );
       }
     } catch {
@@ -228,6 +252,7 @@ export const CreatePostBox: React.FC<CreatePostBoxProps> = ({ groupId, groupName
     setIsSelfDestructOpen(false);
     setPollData(null);
     setIsCreatePollOpen(false);
+    setStorageNotice(null);
     setIsCreatePostOpen(false);
   };
 
@@ -236,10 +261,11 @@ export const CreatePostBox: React.FC<CreatePostBoxProps> = ({ groupId, groupName
       {/* Inline Quick Box */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-3.5 mb-4">
         <div className="flex items-center gap-3">
-          <img
+          <SmartImage
             src={currentUser.avatar}
             alt={currentUser.name}
-            referrerPolicy="no-referrer"
+            fallbackType="avatar"
+            fallbackLabel={currentUser.name}
             className="w-10 h-10 rounded-full object-cover shrink-0"
           />
           <button
@@ -359,10 +385,11 @@ export const CreatePostBox: React.FC<CreatePostBoxProps> = ({ groupId, groupName
 
             {/* Author info & Audience dropdown */}
             <div className="p-4 flex items-center gap-3">
-              <img
+              <SmartImage
                 src={currentUser.avatar}
                 alt={currentUser.name}
-                referrerPolicy="no-referrer"
+                fallbackType="avatar"
+                fallbackLabel={currentUser.name}
                 className="w-11 h-11 rounded-full object-cover"
               />
               <div>
@@ -542,10 +569,11 @@ export const CreatePostBox: React.FC<CreatePostBoxProps> = ({ groupId, groupName
               {/* Attached Photo or Video Preview */}
               {photoPreview && (
                 <div className="relative mt-2 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700">
-                  <img
+                  <SmartImage
                     src={photoPreview}
                     alt="Upload Preview"
-                    referrerPolicy="no-referrer"
+                    fallbackType="media"
+                    fallbackLabel="Upload preview"
                     className="w-full max-h-64 object-cover"
                   />
                   <button
@@ -560,18 +588,40 @@ export const CreatePostBox: React.FC<CreatePostBoxProps> = ({ groupId, groupName
 
               {videoPreview && (
                 <div className="relative mt-2 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-black">
-                  <video
+                  <SmartVideo
                     src={videoPreview}
                     controls
                     playsInline
+                    language={language}
+                    containerClassName="w-full max-h-64 bg-black"
                     className="w-full max-h-64 object-contain"
                   />
                   <button
                     type="button"
-                    onClick={() => setVideoPreview(null)}
-                    className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full cursor-pointer"
+                    onClick={() => {
+                      setVideoPreview(null);
+                      setStorageNotice(null);
+                    }}
+                    className="absolute top-2 right-2 z-20 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full cursor-pointer"
                   >
                     <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {storageNotice === 'local' && (photoPreview || videoPreview) && !isUploadingMedia && (
+                <div className="mt-2 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/70 flex items-center justify-between gap-2 text-[11px] text-amber-800 dark:text-amber-200">
+                  <span>
+                    {language === 'bn'
+                      ? 'মিডিয়াটি কেবল এই ব্রাউজারে সেভ আছে। অন্য ডিভাইস বা লাইভে দেখাতে ক্লাউডিনারি সংযুক্ত করুন।'
+                      : 'Saved locally on this browser only. Connect Cloudinary so live visitors can watch.'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsCloudinaryModalOpen(true)}
+                    className="font-bold underline shrink-0 cursor-pointer"
+                  >
+                    {language === 'bn' ? 'সেটিংস' : 'Configure'}
                   </button>
                 </div>
               )}

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   User,
   Post,
@@ -41,23 +41,41 @@ import {
   initSecurityShield,
 } from '../utils/security';
 import {
+  auth,
+  getSafeUid,
+  getChatId,
   initAuth,
   googleSignIn,
   firebaseLogout,
   firebaseLoginWithEmailPassword,
   firebaseRegisterWithEmailPassword,
   firebaseSendPasswordResetEmail,
+  syncFirebaseUserProfile,
   savePostToFirestoreCloud,
+  updatePostInFirestoreCloud,
   deletePostFromFirestoreCloud,
   subscribeToPublicCloudPosts,
   saveStoryToFirestoreCloud,
+  deleteStoryFromFirestoreCloud,
+  reactToStoryCloud,
   subscribeToCloudStories,
   subscribeToCloudUsers,
   saveReelToFirestoreCloud,
   subscribeToCloudReels,
   updateReelReactionCloud,
+  addReelCommentCloud,
+  incrementReelSharesCloud,
+  incrementReelViewsCloud,
   updatePostReactionCloud,
   sendChatMessageCloud,
+  deleteChatMessageCloud,
+  clearChatMessagesCloud,
+  subscribeToUserCloudChats,
+  subscribeToChatMessagesCloud,
+  markChatMessageSeenCloud,
+  sendGroupChatMessageCloud,
+  subscribeToGroupChatMessagesCloud,
+  getFirebaseDiagnostics,
   CloudChatMessage,
 } from '../firebase';
 import coverSkylineImg from '../assets/images/profile_cover_skyline_1790115270776.jpg';
@@ -309,6 +327,7 @@ interface AppContextType {
   }) => void;
   profiles: User[];
   createNewProfile: (data: {
+    id?: string;
     name: string;
     nameBn?: string;
     username: string;
@@ -374,6 +393,7 @@ interface AppContextType {
       audioUrl?: string;
       audioDuration?: number;
       mediaUrl?: string;
+      mediaType?: 'image' | 'video';
       replyTo?: { id: string; text: string; senderName: string };
     },
   ) => void;
@@ -436,6 +456,14 @@ interface AppContextType {
   setSearchQuery: (query: string) => void;
   toast: string | null;
   showToast: (msg: string) => void;
+  appScale: 'auto' | 'compact' | 'normal';
+  setAppScale: (scale: 'auto' | 'compact' | 'normal') => void;
+  cloudSyncStatus: {
+    isConnected: boolean;
+    lastSyncAt: number | null;
+    diagnostics: ReturnType<typeof getFirebaseDiagnostics>;
+  };
+  forceCloudResync: () => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -533,6 +561,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const t = translations[language];
 
+  // App Display Scale for Android WebView / Installed App vs Desktop Web
+  const [appScale, setAppScaleState] = useState<'auto' | 'compact' | 'normal'>(() => {
+    try {
+      const saved = localStorage.getItem('bandhan_app_scale');
+      if (saved === 'compact' || saved === 'normal' || saved === 'auto') return saved;
+    } catch {
+      // ignore
+    }
+    return 'auto';
+  });
+
+  const setAppScale = useCallback((scale: 'auto' | 'compact' | 'normal') => {
+    setAppScaleState(scale);
+    try {
+      localStorage.setItem('bandhan_app_scale', scale);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+    const htmlEl = document.documentElement;
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+    const isStandalone =
+      Boolean(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+      Boolean((navigator as any).standalone);
+    const isWebView =
+      /\bwv\b|BandhanApp|Crosswalk|WebView/i.test(ua) ||
+      Boolean((window as any).ReactNativeWebView) ||
+      (/Android/i.test(ua) && /Version\/\d+\.\d+/i.test(ua));
+
+    htmlEl.classList.remove('app-compact', 'app-normal');
+    if (appScale === 'compact') {
+      htmlEl.classList.add('app-compact');
+    } else if (appScale === 'normal') {
+      htmlEl.classList.add('app-normal');
+    } else if (isStandalone || isWebView) {
+      htmlEl.classList.add('app-compact');
+    }
+  }, [appScale]);
+
+  const [cloudLastSyncAt, setCloudLastSyncAt] = useState<number | null>(null);
+  const [resyncTrigger, setResyncTrigger] = useState<number>(0);
+
   // Toast notification state & helper
   const [toast, setToast] = useState<string | null>(null);
 
@@ -542,6 +615,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setToast(null);
     }, 3000);
   }, []);
+
+  const forceCloudResync = useCallback(() => {
+    setResyncTrigger((prev) => prev + 1);
+    setCloudLastSyncAt(Date.now());
+    showToast(
+      language === 'bn'
+        ? '🔄 ফায়ারবেস ক্লাউডের সাথে ডেটা রিসিঙ্ক করা হচ্ছে...'
+        : '🔄 Resyncing data with Firebase Cloud...',
+    );
+  }, [language, showToast]);
 
   // User state & Multi-Profile Vault
   const [currentUser, setCurrentUser] = useState<User>(() =>
@@ -662,6 +745,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         localStorage.setItem('bandhan_my_online_status', String(next));
       } catch {
         // ignore
+      }
+      if (auth.currentUser) {
+        syncFirebaseUserProfile(auth.currentUser, { isOnline: next }).catch(() => {});
       }
       return next;
     });
@@ -1015,11 +1101,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       saveStateToDB('bandhan_user', next);
       syncAuthorAcrossAllContent(next);
+      if (auth.currentUser) {
+        syncFirebaseUserProfile(auth.currentUser, {
+          name: next.name,
+          nameBn: next.nameBn,
+          avatar: next.avatar,
+          bio: next.bio,
+          city: next.city,
+        }).catch(() => {});
+      }
       return next;
     });
   };
 
   const createNewProfile = (data: {
+    id?: string;
     name: string;
     nameBn?: string;
     username: string;
@@ -1036,7 +1132,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const colors = ['#1877F2', '#0284c7', '#db2777', '#16a34a', '#9333ea', '#ea580c', '#0d9488'];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
     const newUser: User = {
-      id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: data.id || `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       name: cleanName,
       nameBn: data.nameBn ? sanitizeUserContent(data.nameBn.trim()) : cleanName,
       username:
@@ -1310,17 +1406,218 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  const currentUserIdRef = useRef<string>(currentUser.id);
+  const contactsRef = useRef<User[]>(contacts);
+  const profilesRef = useRef<User[]>(profiles);
+  const activeChatIdsRef = useRef<string[]>([]);
+  const chatListenersRef = useRef<Record<string, () => void>>({});
+
+  useEffect(() => {
+    currentUserIdRef.current = currentUser.id;
+  }, [currentUser.id]);
+
+  useEffect(() => {
+    contactsRef.current = contacts;
+  }, [contacts]);
+
+  useEffect(() => {
+    profilesRef.current = profiles;
+  }, [profiles]);
+
+  const syncCloudChatMessages = useCallback(
+    (friendId: string, cloudMessages: CloudChatMessage[]) => {
+      if (!cloudMessages) return;
+      setCloudLastSyncAt(Date.now());
+      setConversations((prev) => {
+        const existingConv = prev[friendId];
+        const latestSenderMsg = [...cloudMessages].reverse().find((m) => m.senderId === friendId);
+        const targetFriend: User =
+          existingConv?.friend ||
+          contactsRef.current.find((c) => c.id === friendId) ||
+          profilesRef.current.find((p) => p.id === friendId) || {
+            id: friendId,
+            name: latestSenderMsg?.senderName || 'Bandhan Member',
+            nameBn: latestSenderMsg?.senderName || 'বন্ধন সদস্য',
+            username: friendId,
+            avatar:
+              latestSenderMsg?.senderAvatar ||
+              createAvatarUrl(latestSenderMsg?.senderName || 'Bandhan Member', '#2563eb', '#ffffff'),
+            followersCount: 0,
+            friendsCount: 0,
+            isOnline: true,
+          };
+
+        const existingMap = new Map((existingConv?.messages || []).map((m) => [m.id, m]));
+        const cloudIds = new Set<string>();
+        let newlyReceivedUnread = 0;
+
+        const cloudMapped: ChatMessage[] = cloudMessages
+          .filter((cm) => Boolean(cm?.id))
+          .map((cm) => {
+            cloudIds.add(cm.id);
+            const prevMsg = existingMap.get(cm.id);
+            const isFromFriend = cm.senderId !== currentUserIdRef.current;
+            if (!prevMsg && isFromFriend && !cm.isRead) {
+              newlyReceivedUnread += 1;
+            }
+            const resolvedMedia = cm.mediaUrl || cm.imageUrl || prevMsg?.mediaUrl;
+            return {
+              id: cm.id,
+              senderId: cm.senderId,
+              text: cm.text || '',
+              audioUrl: cm.audioUrl || prevMsg?.audioUrl,
+              audioDuration: cm.audioDuration ?? prevMsg?.audioDuration,
+              mediaUrl: resolvedMedia,
+              mediaType: cm.mediaType || prevMsg?.mediaType,
+              replyTo: cm.replyTo || prevMsg?.replyTo,
+              timestamp:
+                prevMsg?.timestamp ||
+                (cm.timestamp
+                  ? new Date(cm.timestamp).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  : 'Just now'),
+              isRead: cm.isRead ?? prevMsg?.isRead ?? false,
+              seenAt: cm.seenAt ?? prevMsg?.seenAt,
+            };
+          });
+
+        const localOnly = (existingConv?.messages || []).filter((m) => !cloudIds.has(m.id));
+        const merged = [...cloudMapped, ...localOnly];
+        const isChatOpen = activeChatIdsRef.current.includes(friendId);
+        const nextUnread = isChatOpen
+          ? 0
+          : (existingConv?.unreadCount || 0) + newlyReceivedUnread;
+
+        if (!existingConv && merged.length === 0) return prev;
+
+        const next = {
+          ...prev,
+          [friendId]: {
+            friend: targetFriend,
+            isOnline: targetFriend.isOnline !== false,
+            unreadCount: nextUnread,
+            messages: merged,
+          },
+        };
+        saveStateToDB('bandhan_conversations', next);
+        return next;
+      });
+    },
+    [],
+  );
+
   useEffect(() => {
     let unsubscribePosts: (() => void) | null = null;
     let unsubscribeReels: (() => void) | null = null;
     let unsubscribeStories: (() => void) | null = null;
     let unsubscribeUsers: (() => void) | null = null;
+    let unsubscribeUserChats: (() => void) | null = null;
+
+    const cleanupCloudChatListeners = () => {
+      Object.values(chatListenersRef.current).forEach((unsub) => unsub());
+      chatListenersRef.current = {};
+    };
+
     const unsubscribeAuth = initAuth(
       (fbUser, token) => {
+        const safeUid = getSafeUid(fbUser.uid);
         setFirebaseUserEmail(fbUser.email || fbUser.displayName || 'Connected');
+        setCloudLastSyncAt(Date.now());
         if (token) {
           setDriveAccessToken(token);
         }
+
+        // Align currentUser & profile ID strictly with Firebase safeUid for cross-account chat, polls & reactions
+        const current = profilesRef.current.find(
+          (p) =>
+            p.id === safeUid ||
+            (fbUser.email && p.email?.toLowerCase() === fbUser.email.toLowerCase()),
+        );
+        const fallbackDisplayName =
+          fbUser.displayName || fbUser.email?.split('@')[0] || 'Bandhan Member';
+        setCurrentUser((prev) => {
+          const matchesPrev =
+            prev.id === safeUid ||
+            prev.id === defaultUser.id ||
+            (fbUser.email && prev.email?.toLowerCase() === fbUser.email.toLowerCase());
+          const base = matchesPrev ? prev : current || prev;
+          const isPlaceholder = base.id === defaultUser.id && !matchesPrev;
+          const alignedName =
+            isPlaceholder || base.name === defaultUser.name
+              ? fbUser.displayName || base.name
+              : base.name;
+          const aligned: User = matchesPrev || current
+            ? {
+                ...base,
+                id: safeUid,
+                name: alignedName,
+                nameBn:
+                  base.nameBn === defaultUser.nameBn && fbUser.displayName
+                    ? fbUser.displayName
+                    : base.nameBn || alignedName,
+                email: fbUser.email || base.email,
+                avatar:
+                  base.avatar ||
+                  fbUser.photoURL ||
+                  createAvatarUrl(alignedName, '#1877F2', '#ffffff'),
+                isVerified: true,
+              }
+            : {
+                id: safeUid,
+                name: fallbackDisplayName,
+                nameBn: fallbackDisplayName,
+                username: (fbUser.email?.split('@')[0] || `user_${safeUid.slice(0, 6)}`)
+                  .toLowerCase()
+                  .replace(/[^a-z0-9_.-]/g, '_'),
+                avatar:
+                  fbUser.photoURL || createAvatarUrl(fallbackDisplayName, '#1877F2', '#ffffff'),
+                coverImage: defaultUser.coverImage,
+                email: fbUser.email || undefined,
+                bio: 'Bandhan Verified Creator ✨',
+                bioBn: 'বন্ধন ভেরিফায়েড প্রোফাইল ✨',
+                city: 'Dhaka, Bangladesh',
+                followersCount: 1,
+                friendsCount: 1,
+                isVerified: true,
+              };
+          saveStateToDB('bandhan_user', aligned);
+          return aligned;
+        });
+
+        setProfiles((prevProfiles) => {
+          const emailLower = fbUser.email?.toLowerCase();
+          const filtered = prevProfiles.filter(
+            (p) => !(emailLower && p.email?.toLowerCase() === emailLower && p.id !== safeUid),
+          );
+          const existingIdx = filtered.findIndex((p) => p.id === safeUid);
+          if (existingIdx !== -1) {
+            return filtered;
+          }
+          const created: User = {
+            id: safeUid,
+            name: fallbackDisplayName,
+            nameBn: fallbackDisplayName,
+            username: (fbUser.email?.split('@')[0] || `user_${safeUid.slice(0, 6)}`)
+              .toLowerCase()
+              .replace(/[^a-z0-9_.-]/g, '_'),
+            avatar: fbUser.photoURL || createAvatarUrl(fallbackDisplayName, '#1877F2', '#ffffff'),
+            coverImage: defaultUser.coverImage,
+            email: fbUser.email || undefined,
+            bio: 'Bandhan Verified Creator ✨',
+            bioBn: 'বন্ধন ভেরিফায়েড প্রোফাইল ✨',
+            city: 'Dhaka, Bangladesh',
+            followersCount: 1,
+            friendsCount: filtered.length,
+            isVerified: true,
+          };
+          const next = [created, ...filtered];
+          saveStateToDB('bandhan_profiles', next);
+          return next;
+        });
+
+        syncFirebaseUserProfile(fbUser, { isOnline: true }).catch(() => {});
 
         // Fetch posts from authenticated backend API (safely skip HTML 404 on static GitHub Pages)
         fbUser
@@ -1393,63 +1690,86 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         if (unsubscribePosts) unsubscribePosts();
         unsubscribePosts = subscribeToPublicCloudPosts((cloudRecords) => {
-          if (!cloudRecords || cloudRecords.length === 0) return;
+          setCloudLastSyncAt(Date.now());
+          if (!cloudRecords) return;
           setPosts((prev) => {
-            const existingIds = new Set(prev.map((p) => p.id));
-            const newFromCloud: Post[] = cloudRecords
-              .filter((cr) => !existingIds.has(cr.id))
-              .map((cr) => {
-                const safeUrl = repairLegacyMediaUrl(
-                  cr.mediaUrl && !cr.mediaUrl.startsWith('blob:') && !cr.mediaUrl.startsWith('idb://')
-                    ? cr.mediaUrl
-                    : undefined,
-                );
-                return {
-                  id: cr.id,
-                  author: {
-                    id: cr.authorId,
-                    name: cr.authorName,
-                    nameBn: cr.authorName,
-                    username: cr.authorName.toLowerCase().replace(/\s+/g, '.'),
-                    avatar: cr.authorAvatar,
-                    followersCount: 0,
-                    friendsCount: 0,
-                    isVerified: true,
-                  },
-                  createdAt: 'Cloud Sync',
-                  content: cr.content,
-                  privacy: cr.privacy,
-                  image: cr.mediaType !== 'video' ? safeUrl : undefined,
-                  video: cr.mediaType === 'video' ? safeUrl : undefined,
-                  mediaType:
-                    (cr.mediaType as 'image' | 'video') ||
-                    (safeUrl
-                      ? safeUrl.startsWith('data:video') || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(safeUrl)
-                        ? 'video'
-                        : 'image'
-                      : undefined),
-                  driveFile: cr.driveFileId
-                    ? {
-                        id: cr.driveFileId,
-                        name: cr.driveFileName || 'Google Drive File',
-                        webViewLink: cr.driveWebViewLink,
-                      }
-                    : undefined,
-                  reactions: {
-                    like: 0,
-                    love: 0,
-                    care: 0,
-                    haha: 0,
-                    wow: 0,
-                    sad: 0,
-                    angry: 0,
-                  },
-                  comments: [],
-                  sharesCount: 0,
-                };
-              });
-            if (newFromCloud.length === 0) return prev;
-            const merged = [...newFromCloud, ...prev];
+            const prevMap = new Map(prev.map((p) => [p.id, p]));
+            const cloudIds = new Set<string>();
+            const cloudMapped: Post[] = cloudRecords.map((cr) => {
+              cloudIds.add(cr.id);
+              const existing = prevMap.get(cr.id);
+              const safeUrl = repairLegacyMediaUrl(
+                cr.mediaUrl && !cr.mediaUrl.startsWith('blob:') && !cr.mediaUrl.startsWith('idb://')
+                  ? cr.mediaUrl
+                  : undefined,
+              );
+              const resolvedImage = cr.mediaType !== 'video' ? safeUrl || existing?.image : undefined;
+              const resolvedVideo = cr.mediaType === 'video' ? safeUrl || existing?.video : undefined;
+              const reactionsObj = {
+                like: Number(cr.reactions?.like ?? existing?.reactions?.like ?? 0),
+                love: Number(cr.reactions?.love ?? existing?.reactions?.love ?? 0),
+                care: Number(cr.reactions?.care ?? existing?.reactions?.care ?? 0),
+                haha: Number(cr.reactions?.haha ?? existing?.reactions?.haha ?? 0),
+                wow: Number(cr.reactions?.wow ?? existing?.reactions?.wow ?? 0),
+                sad: Number(cr.reactions?.sad ?? existing?.reactions?.sad ?? 0),
+                angry: Number(cr.reactions?.angry ?? existing?.reactions?.angry ?? 0),
+              };
+              const userReactionsMap = (cr.userReactions || existing?.userReactions || {}) as Record<
+                string,
+                ReactionType
+              >;
+              return {
+                id: cr.id,
+                author: {
+                  id: cr.authorId,
+                  name: cr.authorName,
+                  nameBn: cr.authorName,
+                  username: cr.authorName.toLowerCase().replace(/\s+/g, '.'),
+                  avatar: cr.authorAvatar || createAvatarUrl(cr.authorName, '#1877F2', '#ffffff'),
+                  followersCount: existing?.author.followersCount || 0,
+                  friendsCount: existing?.author.friendsCount || 0,
+                  isVerified: true,
+                },
+                createdAt:
+                  existing?.createdAt && existing.createdAt !== 'Cloud Sync'
+                    ? existing.createdAt
+                    : 'Cloud Sync',
+                content: cr.content,
+                privacy: cr.privacy,
+                gradientBg: cr.gradientBg || existing?.gradientBg,
+                location: cr.location || existing?.location,
+                feeling: (cr.feeling as Post['feeling']) || existing?.feeling,
+                isLive: cr.isLive ?? existing?.isLive,
+                poll: cr.poll || existing?.poll,
+                scheduledFor: cr.scheduledFor || existing?.scheduledFor,
+                expiresAt: cr.expiresAt || existing?.expiresAt,
+                image: resolvedImage,
+                video: resolvedVideo,
+                mediaType:
+                  (cr.mediaType as 'image' | 'video') ||
+                  existing?.mediaType ||
+                  (resolvedVideo ? 'video' : resolvedImage ? 'image' : undefined),
+                musicTitle: cr.musicTitle || existing?.musicTitle,
+                audioUrl: cr.audioUrl || existing?.audioUrl,
+                driveFile: cr.driveFileId
+                  ? {
+                      id: cr.driveFileId,
+                      name: cr.driveFileName || 'Google Drive File',
+                      webViewLink: cr.driveWebViewLink,
+                    }
+                  : existing?.driveFile,
+                reactions: reactionsObj,
+                userReactions: userReactionsMap,
+                userReaction: (userReactionsMap[safeUid] as ReactionType | undefined) || null,
+                comments: Array.isArray(cr.comments) ? cr.comments : existing?.comments || [],
+                sharesCount:
+                  typeof cr.sharesCount === 'number' ? cr.sharesCount : existing?.sharesCount || 0,
+                isSaved: existing?.isSaved,
+                isPinned: existing?.isPinned,
+              };
+            });
+            const localOnly = prev.filter((p) => !cloudIds.has(p.id));
+            const merged = [...cloudMapped, ...localOnly];
             saveStateToDB('bandhan_posts', merged);
             return merged;
           });
@@ -1457,42 +1777,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         if (unsubscribeReels) unsubscribeReels();
         unsubscribeReels = subscribeToCloudReels((cloudReels) => {
-          if (!cloudReels || cloudReels.length === 0) return;
+          setCloudLastSyncAt(Date.now());
+          if (!cloudReels) return;
           setReels((prev) => {
-            const existingIds = new Set(prev.map((r) => r.id));
-            const newFromCloud: ReelItem[] = cloudReels
+            const prevMap = new Map(prev.map((r) => [r.id, r]));
+            const cloudIds = new Set<string>();
+            const cloudMapped: ReelItem[] = cloudReels
               .filter(
                 (cr) =>
-                  !existingIds.has(cr.id) &&
-                  cr.videoUrl &&
-                  !cr.videoUrl.startsWith('blob:') &&
-                  !cr.videoUrl.startsWith('idb://'),
+                  cr.videoUrl && !cr.videoUrl.startsWith('blob:') && !cr.videoUrl.startsWith('idb://'),
               )
-              .map((cr) => ({
-                id: cr.id,
-                author: {
-                  id: cr.authorId,
-                  name: cr.authorName,
-                  nameBn: cr.authorName,
-                  username: cr.authorName.toLowerCase().replace(/\s+/g, '.'),
-                  avatar: cr.authorAvatar,
-                  followersCount: 0,
-                  friendsCount: 0,
-                  isVerified: true,
-                },
-                videoUrl: repairLegacyMediaUrl(cr.videoUrl),
-                description: cr.caption,
-                songTitle: cr.soundTitle || 'Original Audio',
-                likesCount: cr.likesCount || 0,
-                likedUserIds: cr.likedUserIds || [],
-                commentsCount: cr.commentsCount || 0,
-                sharesCount: cr.sharesCount || 0,
-                viewsCount: cr.viewsCount || 0,
-                createdAt: 'Cloud Sync',
-                isLiked: Array.isArray(cr.likedUserIds) && cr.likedUserIds.includes(currentUser.id),
-              }));
-            if (newFromCloud.length === 0) return prev;
-            const merged = [...newFromCloud, ...prev];
+              .map((cr) => {
+                cloudIds.add(cr.id);
+                const existing = prevMap.get(cr.id);
+                const likedIds = Array.isArray(cr.likedUserIds) ? cr.likedUserIds : [];
+                return {
+                  id: cr.id,
+                  author: {
+                    id: cr.authorId,
+                    name: cr.authorName,
+                    nameBn: cr.authorName,
+                    username: cr.authorName.toLowerCase().replace(/\s+/g, '.'),
+                    avatar: cr.authorAvatar || createAvatarUrl(cr.authorName, '#1877F2', '#ffffff'),
+                    followersCount: existing?.author.followersCount || 0,
+                    friendsCount: existing?.author.friendsCount || 0,
+                    isVerified: true,
+                  },
+                  videoUrl: repairLegacyMediaUrl(cr.videoUrl),
+                  posterUrl: cr.posterUrl
+                    ? repairLegacyMediaUrl(cr.posterUrl)
+                    : existing?.posterUrl,
+                  description: cr.caption,
+                  songTitle: cr.soundTitle || 'Original Audio',
+                  likesCount: cr.likesCount || 0,
+                  likedUserIds: likedIds,
+                  commentsCount:
+                    cr.commentsCount || (Array.isArray(cr.comments) ? cr.comments.length : 0),
+                  comments: Array.isArray(cr.comments) ? cr.comments : existing?.comments || [],
+                  sharesCount: cr.sharesCount || 0,
+                  viewsCount: cr.viewsCount || 0,
+                  createdAt:
+                    existing?.createdAt && existing.createdAt !== 'Cloud Sync'
+                      ? existing.createdAt
+                      : 'Cloud Sync',
+                  isLiked: likedIds.includes(safeUid),
+                };
+              });
+            const localOnly = prev.filter((r) => !cloudIds.has(r.id));
+            const merged = [...cloudMapped, ...localOnly];
             saveStateToDB('bandhan_reels', merged);
             return merged;
           });
@@ -1500,40 +1832,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         if (unsubscribeStories) unsubscribeStories();
         unsubscribeStories = subscribeToCloudStories((cloudStories) => {
-          if (!cloudStories || cloudStories.length === 0) return;
+          setCloudLastSyncAt(Date.now());
+          if (!cloudStories) return;
           setStories((prev) => {
-            const existingIds = new Set(prev.map((s) => s.id));
+            const prevMap = new Map(prev.map((s) => [s.id, s]));
+            const cloudIds = new Set<string>();
             const mapped: Story[] = cloudStories
-              .filter((cs) => cs?.id && !existingIds.has(cs.id))
-              .map((cs) => ({
-                id: String(cs.id),
-                author: {
-                  id: String(cs.authorId || 'cloud_user'),
-                  name: String(cs.authorName || 'Bandhan Member'),
-                  nameBn: String(cs.authorName || 'বন্ধন সদস্য'),
-                  username: String(cs.authorName || 'user').toLowerCase().replace(/\s+/g, '.'),
-                  avatar:
-                    cs.authorAvatar ||
-                    `https://ui-avatars.com/api/?name=${encodeURIComponent(cs.authorName || 'User')}`,
-                  followersCount: 0,
-                  friendsCount: 0,
-                  isVerified: true,
-                },
-                mediaUrl: cs.mediaUrl ? repairLegacyMediaUrl(String(cs.mediaUrl)) : undefined,
-                videoUrl: cs.videoUrl ? repairLegacyMediaUrl(String(cs.videoUrl)) : undefined,
-                mediaType: (cs.mediaType as 'image' | 'video' | 'text') || (cs.videoUrl ? 'video' : cs.mediaUrl ? 'image' : 'text'),
-                text: cs.text ? String(cs.text) : undefined,
-                gradientBg: cs.gradientBg ? String(cs.gradientBg) : undefined,
-                audioUrl: cs.audioUrl ? repairLegacyMediaUrl(String(cs.audioUrl)) : undefined,
-                audioTitle: cs.audioTitle ? String(cs.audioTitle) : undefined,
-                audioArtist: cs.audioArtist ? String(cs.audioArtist) : undefined,
-                createdAt: 'Cloud Sync',
-                expiresAt: typeof cs.expiresAt === 'number' ? cs.expiresAt : Date.now() + STORY_TTL_MS,
-                isViewed: false,
-              }));
-            const validNew = filterValidStories(mapped);
-            if (validNew.length === 0) return prev;
-            const next = [...validNew, ...filterValidStories(prev)];
+              .filter((cs) => Boolean(cs?.id))
+              .map((cs) => {
+                const idStr = String(cs.id);
+                cloudIds.add(idStr);
+                const existing = prevMap.get(idStr);
+                return {
+                  id: idStr,
+                  author: {
+                    id: String(cs.authorId || 'cloud_user'),
+                    name: String(cs.authorName || 'Bandhan Member'),
+                    nameBn: String(cs.authorName || 'বন্ধন সদস্য'),
+                    username: String(cs.authorName || 'user').toLowerCase().replace(/\s+/g, '.'),
+                    avatar:
+                      cs.authorAvatar ||
+                      `https://ui-avatars.com/api/?name=${encodeURIComponent(cs.authorName || 'User')}`,
+                    followersCount: 0,
+                    friendsCount: 0,
+                    isVerified: true,
+                  },
+                  mediaUrl: cs.mediaUrl ? repairLegacyMediaUrl(String(cs.mediaUrl)) : existing?.mediaUrl,
+                  videoUrl: cs.videoUrl ? repairLegacyMediaUrl(String(cs.videoUrl)) : existing?.videoUrl,
+                  mediaType:
+                    (cs.mediaType as 'image' | 'video' | 'text') ||
+                    (cs.videoUrl ? 'video' : cs.mediaUrl ? 'image' : 'text'),
+                  text: cs.text ? String(cs.text) : undefined,
+                  gradientBg: cs.gradientBg ? String(cs.gradientBg) : undefined,
+                  audioUrl: cs.audioUrl ? repairLegacyMediaUrl(String(cs.audioUrl)) : undefined,
+                  audioTitle: cs.audioTitle ? String(cs.audioTitle) : undefined,
+                  audioArtist: cs.audioArtist ? String(cs.audioArtist) : undefined,
+                  reactions: cs.reactions || existing?.reactions || {},
+                  userReactions: cs.userReactions || existing?.userReactions || {},
+                  reactionUsers: Array.isArray(cs.reactionUsers)
+                    ? cs.reactionUsers
+                    : existing?.reactionUsers || [],
+                  createdAt:
+                    existing?.createdAt && existing.createdAt !== 'Cloud Sync'
+                      ? existing.createdAt
+                      : 'Cloud Sync',
+                  expiresAt: typeof cs.expiresAt === 'number' ? cs.expiresAt : Date.now() + STORY_TTL_MS,
+                  isViewed: existing?.isViewed || false,
+                };
+              });
+            const validCloud = filterValidStories(mapped);
+            const localOnly = filterValidStories(prev.filter((s) => !cloudIds.has(s.id)));
+            const next = [...validCloud, ...localOnly];
             saveStateToDB('bandhan_stories', next);
             return next;
           });
@@ -1541,9 +1890,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         if (unsubscribeUsers) unsubscribeUsers();
         unsubscribeUsers = subscribeToCloudUsers((cloudUsers) => {
+          setCloudLastSyncAt(Date.now());
           if (!cloudUsers || cloudUsers.length === 0) return;
           const mappedUsers: User[] = cloudUsers
-            .filter((cu) => cu.uid && cu.uid !== fbUser.uid)
+            .filter((cu) => cu.uid && cu.uid !== safeUid)
             .map((cu) => ({
               id: cu.uid,
               name: cu.name,
@@ -1554,7 +1904,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               city: cu.city || 'Bangladesh',
               followersCount: 0,
               friendsCount: 0,
-              isOnline: true,
+              isOnline: cu.isOnline !== false,
               isVerified: true,
             }));
           if (mappedUsers.length === 0) return;
@@ -1569,6 +1919,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const next = Array.from(map.values());
             saveStateToDB('bandhan_contacts', next);
             return next;
+          });
+        });
+
+        if (unsubscribeUserChats) unsubscribeUserChats();
+        cleanupCloudChatListeners();
+        unsubscribeUserChats = subscribeToUserCloudChats(safeUid, (cloudChats) => {
+          setCloudLastSyncAt(Date.now());
+          const activeIdsSet = new Set(cloudChats.map((c) => c.chatId));
+          Object.keys(chatListenersRef.current).forEach((cid) => {
+            if (!activeIdsSet.has(cid)) {
+              chatListenersRef.current[cid]?.();
+              delete chatListenersRef.current[cid];
+            }
+          });
+
+          cloudChats.forEach((chat) => {
+            const peerId = chat.participants.find((pid) => pid !== safeUid);
+            if (!peerId) return;
+            const peerProfile = chat.participantProfiles?.[peerId];
+            setConversations((prev) => {
+              if (prev[peerId]) return prev;
+              const knownUser =
+                contactsRef.current.find((c) => c.id === peerId) ||
+                profilesRef.current.find((p) => p.id === peerId) || {
+                  id: peerId,
+                  name: peerProfile?.name || 'Bandhan Member',
+                  nameBn: peerProfile?.name || 'বন্ধন সদস্য',
+                  username: peerId,
+                  avatar:
+                    peerProfile?.avatar ||
+                    createAvatarUrl(peerProfile?.name || 'Bandhan Member', '#2563eb', '#ffffff'),
+                  followersCount: 0,
+                  friendsCount: 0,
+                  isOnline: true,
+                };
+              const next = {
+                ...prev,
+                [peerId]: {
+                  friend: knownUser,
+                  isOnline: knownUser.isOnline !== false,
+                  unreadCount: 0,
+                  messages: [],
+                },
+              };
+              saveStateToDB('bandhan_conversations', next);
+              return next;
+            });
+
+            if (!chatListenersRef.current[chat.chatId]) {
+              chatListenersRef.current[chat.chatId] = subscribeToChatMessagesCloud(
+                chat.chatId,
+                (cloudMsgs) => {
+                  syncCloudChatMessages(peerId, cloudMsgs);
+                },
+              );
+            }
           });
         });
       },
@@ -1591,6 +1997,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           unsubscribeUsers();
           unsubscribeUsers = null;
         }
+        if (unsubscribeUserChats) {
+          unsubscribeUserChats();
+          unsubscribeUserChats = null;
+        }
+        cleanupCloudChatListeners();
       },
     );
 
@@ -1600,8 +2011,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (unsubscribeReels) unsubscribeReels();
       if (unsubscribeStories) unsubscribeStories();
       if (unsubscribeUsers) unsubscribeUsers();
+      if (unsubscribeUserChats) unsubscribeUserChats();
+      cleanupCloudChatListeners();
     };
-  }, []);
+  }, [resyncTrigger, syncCloudChatMessages]);
+
+  // Real-time Group Chat cloud subscription when a group chat window is open
+  useEffect(() => {
+    if (!activeGroupChatId || !auth.currentUser) return;
+    const unsubGroupChat = subscribeToGroupChatMessagesCloud(activeGroupChatId, (cloudMsgs) => {
+      setCloudLastSyncAt(Date.now());
+      if (!cloudMsgs || cloudMsgs.length === 0) return;
+      setGroupChats((prev) => {
+        const existingList = prev[activeGroupChatId] || [];
+        const existingIds = new Set(existingList.map((m) => m.id));
+        const mappedNew: GroupChatMessage[] = cloudMsgs
+          .filter((cm) => !existingIds.has(cm.id))
+          .map((cm) => ({
+            id: cm.id,
+            groupId: activeGroupChatId,
+            senderId: cm.senderId,
+            senderName: cm.senderName,
+            senderAvatar: cm.senderAvatar || createAvatarUrl(cm.senderName, '#1877F2', '#ffffff'),
+            text: cm.text,
+            timestamp: new Date(cm.timestamp).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+          }));
+        if (mappedNew.length === 0) return prev;
+        const next = {
+          ...prev,
+          [activeGroupChatId]: [...existingList, ...mappedNew],
+        };
+        saveStateToDB('bandhan_group_chats', next);
+        return next;
+      });
+    });
+    return () => unsubGroupChat();
+  }, [activeGroupChatId, firebaseUserEmail]);
 
   const signInWithGoogleAccount = async (): Promise<boolean> => {
     try {
@@ -1612,7 +2060,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setDriveAccessToken(accessToken);
       setFirebaseUserEmail(fbUser.email || fbUser.displayName || 'Connected');
 
-      const safeUid = fbUser.uid.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const safeUid = getSafeUid(fbUser.uid);
       const existingProfile = profiles.find(
         (p) =>
           p.id === safeUid ||
@@ -1622,6 +2070,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (existingProfile) {
         const updatedUser: User = {
           ...existingProfile,
+          id: safeUid,
           name: fbUser.displayName || existingProfile.name,
           avatar: fbUser.photoURL || existingProfile.avatar,
           email: fbUser.email || existingProfile.email,
@@ -1629,10 +2078,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
         setCurrentUser(updatedUser);
         saveStateToDB('bandhan_user', updatedUser);
+        setProfiles((prev) => {
+          const next = prev.map((p) => (p.id === existingProfile.id ? updatedUser : p));
+          saveStateToDB('bandhan_profiles', next);
+          return next;
+        });
         setIsAuthenticated(true);
         saveStateToDB('bandhan_is_authenticated', true);
       } else {
         createNewProfile({
+          id: safeUid,
           name: fbUser.displayName || 'Google User',
           nameBn: fbUser.displayName || 'গুগল ইউজার',
           username: fbUser.email ? fbUser.email.split('@')[0] : `google_${safeUid.slice(0, 6)}`,
@@ -1641,6 +2096,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           bio: 'Connected via Google Drive & Firebase Cloud ☁️',
         });
       }
+
+      syncFirebaseUserProfile(fbUser, {
+        name: fbUser.displayName || undefined,
+        avatar: fbUser.photoURL || undefined,
+        isOnline: isMyStatusOnline,
+      }).catch(() => {});
 
       showToast(
         language === 'bn'
@@ -1663,48 +2124,88 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const fbUser = await firebaseLoginWithEmailPassword(email, pass);
       setFirebaseUserEmail(fbUser.email || fbUser.displayName);
-      const safeUid = fbUser.uid.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const existing = profiles.find((p) => p.id === safeUid || (fbUser.email && p.email?.toLowerCase() === fbUser.email.toLowerCase()));
+      const safeUid = getSafeUid(fbUser.uid);
+      const existing = profiles.find(
+        (p) =>
+          p.id === safeUid ||
+          (fbUser.email && p.email?.toLowerCase() === fbUser.email.toLowerCase()),
+      );
       if (existing) {
-        setCurrentUser(existing);
-        saveStateToDB('bandhan_user', existing);
+        const alignedExisting: User = { ...existing, id: safeUid, isVerified: true };
+        setCurrentUser(alignedExisting);
+        saveStateToDB('bandhan_user', alignedExisting);
+        setProfiles((prev) => {
+          const next = prev.map((p) => (p.id === existing.id ? alignedExisting : p));
+          saveStateToDB('bandhan_profiles', next);
+          return next;
+        });
       } else {
         createNewProfile({
+          id: safeUid,
           name: fbUser.displayName || email.split('@')[0],
           username: email.split('@')[0],
           email: fbUser.email || email,
           bio: 'Verified Bandhan Member ✨',
         });
       }
+      syncFirebaseUserProfile(fbUser, { isOnline: isMyStatusOnline }).catch(() => {});
       setIsAuthenticated(true);
       saveStateToDB('bandhan_is_authenticated', true);
-      showToast(language === 'bn' ? `✅ সফলভাবে লগইন হয়েছে (${fbUser.email})` : `✅ Logged in successfully (${fbUser.email})`);
+      showToast(
+        language === 'bn'
+          ? `✅ সফলভাবে লগইন হয়েছে (${fbUser.email})`
+          : `✅ Logged in successfully (${fbUser.email})`,
+      );
       return true;
     } catch (err: any) {
       console.error('Firebase Email Login error:', err);
-      showToast(language === 'bn' ? `❌ ইমেইল বা পাসওয়ার্ড সঠিক নয়: ${err.message || 'Login failed'}` : `❌ Login failed: ${err.message || 'Invalid credentials'}`);
+      showToast(
+        language === 'bn'
+          ? `❌ ইমেইল বা পাসওয়ার্ড সঠিক নয়: ${err.message || 'Login failed'}`
+          : `❌ Login failed: ${err.message || 'Invalid credentials'}`,
+      );
       return false;
     }
   };
 
-  const registerWithEmail = async (email: string, pass: string, name: string, nameBn?: string): Promise<boolean> => {
+  const registerWithEmail = async (
+    email: string,
+    pass: string,
+    name: string,
+    nameBn?: string,
+  ): Promise<boolean> => {
     try {
       const fbUser = await firebaseRegisterWithEmailPassword(email, pass, name, nameBn);
       setFirebaseUserEmail(fbUser.email || fbUser.displayName);
+      const safeUid = getSafeUid(fbUser.uid);
       createNewProfile({
+        id: safeUid,
         name: name.trim() || email.split('@')[0],
         nameBn: nameBn?.trim(),
         username: email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '_'),
         email: fbUser.email || email,
         bio: 'New Bandhan Creator ✨',
       });
+      syncFirebaseUserProfile(fbUser, {
+        name: name.trim() || email.split('@')[0],
+        nameBn: nameBn?.trim() || name.trim(),
+        isOnline: isMyStatusOnline,
+      }).catch(() => {});
       setIsAuthenticated(true);
       saveStateToDB('bandhan_is_authenticated', true);
-      showToast(language === 'bn' ? '🎉 ফায়ারবেস অথেন্টিকেশনে সফলভাবে অ্যাকাউন্ট খোলা সম্পন্ন হয়েছে!' : '🎉 Account registered and authenticated with Firebase!');
+      showToast(
+        language === 'bn'
+          ? '🎉 ফায়ারবেস অথেন্টিকেশনে সফলভাবে অ্যাকাউন্ট খোলা সম্পন্ন হয়েছে!'
+          : '🎉 Account registered and authenticated with Firebase!',
+      );
       return true;
     } catch (err: any) {
       console.error('Firebase Email Register error:', err);
-      showToast(language === 'bn' ? `❌ রেজিস্ট্রেশন ব্যর্থ হয়েছে: ${err.message || 'Registration error'}` : `❌ Registration failed: ${err.message || 'Error creating account'}`);
+      showToast(
+        language === 'bn'
+          ? `❌ রেজিস্ট্রেশন ব্যর্থ হয়েছে: ${err.message || 'Registration error'}`
+          : `❌ Registration failed: ${err.message || 'Error creating account'}`,
+      );
       return false;
     }
   };
@@ -1898,6 +2399,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [searchQuery, setSearchQuery] = useState('');
 
   const [activeChatIds, setActiveChatIds] = useState<string[]>([]);
+  useEffect(() => {
+    activeChatIdsRef.current = activeChatIds;
+  }, [activeChatIds]);
 
   // Post Actions
   const addPost = (postData: Omit<Post, 'id' | 'author' | 'createdAt' | 'reactions' | 'comments' | 'sharesCount'>) => {
@@ -1930,10 +2434,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       privacy: newPost.privacy,
       mediaUrl: newPost.image || newPost.video,
       mediaType: newPost.mediaType || (newPost.video ? 'video' : newPost.image ? 'image' : undefined),
+      gradientBg: newPost.gradientBg,
+      location: newPost.location,
+      feeling: newPost.feeling,
+      isLive: newPost.isLive,
+      musicTitle: newPost.musicTitle,
+      audioUrl: newPost.audioUrl,
+      poll: newPost.poll,
+      scheduledFor: newPost.scheduledFor,
+      expiresAt: newPost.expiresAt,
+      reactions: newPost.reactions,
+      userReactions: newPost.userReactions,
       driveFileId: newPost.driveFile?.id,
       driveFileName: newPost.driveFile?.name,
       driveWebViewLink: newPost.driveFile?.webViewLink,
-      poll: newPost.poll,
     }).catch(() => {});
     showToast(language === 'bn' ? 'আপনার পোস্ট সফলভাবে প্রকাশিত হয়েছে!' : 'Your post has been published!');
   };
@@ -2154,6 +2668,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveStateToDB('bandhan_posts', next);
       return next;
     });
+    updatePostInFirestoreCloud(postId, { privacy }).catch(() => {});
     const labelBn =
       privacy === 'public' ? '🌐 পাবলিক' : privacy === 'friends' ? '👥 বন্ধুদের জন্য' : '🔒 শুধুমাত্র আমি';
     const labelEn =
@@ -2212,13 +2727,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const reactToPost = (postId: string, reaction: ReactionType) => {
+    const existingTarget = posts.find((p) => p.id === postId);
+    const prevReactionForUser =
+      existingTarget?.userReactions?.[currentUser.id] || existingTarget?.userReaction || null;
+    const cloudReactionVal = prevReactionForUser === reaction ? null : reaction;
+
     setPosts((prev) => {
       const next = prev.map((post) => {
         if (post.id !== postId) return post;
 
         const updatedReactions = { ...post.reactions };
         const userReactionsMap = { ...(post.userReactions || {}) };
-        const prevUserReaction = userReactionsMap[currentUser.id] || null;
+        const prevUserReaction = userReactionsMap[currentUser.id] || post.userReaction || null;
 
         // If clicking the same reaction, toggle off
         if (prevUserReaction === reaction) {
@@ -2261,12 +2781,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     // Synchronize reaction with Firestore Cloud
-    updatePostReactionCloud(postId, reaction).catch((err) => {
+    updatePostReactionCloud(postId, cloudReactionVal).catch((err) => {
       console.warn('Post cloud reaction notice:', err);
     });
   };
 
   const votePoll = (postId: string, optionId: string) => {
+    const targetPost = posts.find((p) => p.id === postId);
+    if (targetPost?.poll) {
+      const currentUserId = currentUser.id;
+      const nextOptions = targetPost.poll.options.map((opt) => {
+        const isVoted = opt.votes.includes(currentUserId);
+        if (opt.id === optionId) {
+          return {
+            ...opt,
+            votes: isVoted
+              ? opt.votes.filter((uid) => uid !== currentUserId)
+              : [...opt.votes, currentUserId],
+          };
+        }
+        return {
+          ...opt,
+          votes: opt.votes.filter((uid) => uid !== currentUserId),
+        };
+      });
+      updatePostInFirestoreCloud(postId, {
+        poll: { ...targetPost.poll, options: nextOptions },
+      }).catch(() => {});
+    }
+
     setPosts((prev) => {
       const next = prev.map((post) => {
         if (post.id !== postId || !post.poll) return post;
@@ -2275,13 +2818,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const updatedOptions = post.poll.options.map((opt) => {
           const isVoted = opt.votes.includes(currentUserId);
           if (opt.id === optionId) {
-            // Toggle vote on or off
             const newVotes = isVoted
               ? opt.votes.filter((uid) => uid !== currentUserId)
               : [...opt.votes, currentUserId];
             return { ...opt, votes: newVotes };
           } else {
-            // Remove user from other options (single-choice voting)
             return {
               ...opt,
               votes: opt.votes.filter((uid) => uid !== currentUserId),
@@ -2312,33 +2853,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!content.trim()) return;
 
     const targetPost = posts.find((p) => p.id === postId);
+    let nextCommentsForCloud: Post['comments'] | null = null;
 
-    setPosts((prev) => {
-      const next = prev.map((post) => {
-        if (post.id !== postId) return post;
-
-        if (parentCommentId) {
-          // Reply to nested comment
-          const updatedComments = post.comments.map((c) => {
-            if (c.id === parentCommentId) {
-              const newReply = {
-                id: `cr_${Date.now()}`,
-                author: currentUser,
-                content: content.trim(),
-                createdAt: language === 'bn' ? 'এইমাত্র' : 'Just now',
-                likesCount: 0,
-              };
-              return {
-                ...c,
-                replies: [...(c.replies || []), newReply],
-              };
-            }
-            return c;
-          });
-          return { ...post, comments: updatedComments };
-        }
-
-        // Top level comment
+    if (targetPost) {
+      if (parentCommentId) {
+        const newReply = {
+          id: `cr_${Date.now()}`,
+          author: currentUser,
+          content: content.trim(),
+          createdAt: language === 'bn' ? 'এইমাত্র' : 'Just now',
+          likesCount: 0,
+        };
+        nextCommentsForCloud = targetPost.comments.map((c) =>
+          c.id === parentCommentId ? { ...c, replies: [...(c.replies || []), newReply] } : c,
+        );
+      } else {
         const newComment = {
           id: `c_${Date.now()}`,
           author: currentUser,
@@ -2347,17 +2876,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           likesCount: 0,
           replies: [],
         };
-        return {
-          ...post,
-          comments: [...post.comments, newComment],
-        };
+        nextCommentsForCloud = [...targetPost.comments, newComment];
+      }
+      updatePostInFirestoreCloud(postId, {
+        comments: nextCommentsForCloud,
+        commentsCount: nextCommentsForCloud.length,
+      }).catch(() => {});
+    }
+
+    setPosts((prev) => {
+      const next = prev.map((post) => {
+        if (post.id !== postId) return post;
+        if (nextCommentsForCloud) {
+          return { ...post, comments: nextCommentsForCloud };
+        }
+        return post;
       });
       saveStateToDB('bandhan_posts', next);
       return next;
     });
 
-    // Simulate interaction notification for comment
-    if (targetPost && targetPost.author.id !== currentUser.id && !blockedUserIds.includes(targetPost.author.id)) {
+    // Interaction notification for comment
+    if (
+      targetPost &&
+      targetPost.author.id !== currentUser.id &&
+      !blockedUserIds.includes(targetPost.author.id)
+    ) {
       setTimeout(() => {
         addNotification({
           type: 'comment',
@@ -2371,6 +2915,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteComment = (postId: string, commentId: string, replyId?: string) => {
+    const targetPost = posts.find((p) => p.id === postId);
+    if (targetPost) {
+      const updatedComments = replyId
+        ? targetPost.comments.map((c) =>
+            c.id === commentId
+              ? { ...c, replies: (c.replies || []).filter((r) => r.id !== replyId) }
+              : c,
+          )
+        : targetPost.comments.filter((c) => c.id !== commentId);
+      updatePostInFirestoreCloud(postId, {
+        comments: updatedComments,
+        commentsCount: updatedComments.length,
+      }).catch(() => {});
+    }
+
     setPosts((prev) => {
       const next = prev.map((post) => {
         if (post.id !== postId) return post;
@@ -2401,92 +2960,102 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     reaction: ReactionType,
     replyId?: string,
   ) => {
-    setPosts((prev) => {
-      const next = prev.map((post) => {
-        if (post.id !== postId) return post;
-
-        const updatedComments = post.comments.map((c) => {
-          // If reacting to a nested reply
-          if (replyId && c.replies) {
-            const updatedReplies = c.replies.map((r) => {
-              if (r.id !== replyId) return r;
-
-              const userMap: Record<string, ReactionType> = { ...(r.userReactions || {}) };
-              if (r.userReaction && !userMap[currentUser.id] && r.author.id === currentUser.id) {
-                userMap[currentUser.id] = r.userReaction;
-              }
-              const prevUserReaction = userMap[currentUser.id] || null;
-              const existingReactions: Partial<Record<ReactionType, number>> = { ...(r.reactions || {}) };
-
-              // If clicking the same reaction, toggle off
-              if (prevUserReaction === reaction) {
-                existingReactions[reaction] = Math.max(0, (existingReactions[reaction] || 1) - 1);
-                delete userMap[currentUser.id];
-              } else {
-                if (prevUserReaction) {
-                  existingReactions[prevUserReaction] = Math.max(0, (existingReactions[prevUserReaction] || 1) - 1);
-                }
-                existingReactions[reaction] = (existingReactions[reaction] || 0) + 1;
-                userMap[currentUser.id] = reaction;
-              }
-
-              const totalLikes = Math.max(
-                Object.keys(userMap).length,
-                Object.values(existingReactions).reduce((sum, count) => (sum || 0) + (count || 0), 0) || 0,
-              );
-
-              return {
-                ...r,
-                userReactions: userMap,
-                userReaction: userMap[currentUser.id] || null,
-                isLiked: Boolean(userMap[currentUser.id]),
-                reactions: existingReactions,
-                likesCount: totalLikes,
-              };
-            });
-            return { ...c, replies: updatedReplies };
-          }
-
-          // Reacting to the comment itself
-          if (c.id === commentId) {
-            const userMap: Record<string, ReactionType> = { ...(c.userReactions || {}) };
-            if (c.userReaction && !userMap[currentUser.id] && c.author.id === currentUser.id) {
-              userMap[currentUser.id] = c.userReaction;
+    const computeUpdatedComments = (post: Post) =>
+      post.comments.map((c) => {
+        if (replyId && c.replies) {
+          const updatedReplies = c.replies.map((r) => {
+            if (r.id !== replyId) return r;
+            const userMap: Record<string, ReactionType> = { ...(r.userReactions || {}) };
+            if (r.userReaction && !userMap[currentUser.id] && r.author.id === currentUser.id) {
+              userMap[currentUser.id] = r.userReaction;
             }
             const prevUserReaction = userMap[currentUser.id] || null;
-            const existingReactions: Partial<Record<ReactionType, number>> = { ...(c.reactions || {}) };
-
-            // If clicking the same reaction, toggle off
+            const existingReactions: Partial<Record<ReactionType, number>> = {
+              ...(r.reactions || {}),
+            };
             if (prevUserReaction === reaction) {
               existingReactions[reaction] = Math.max(0, (existingReactions[reaction] || 1) - 1);
               delete userMap[currentUser.id];
             } else {
               if (prevUserReaction) {
-                existingReactions[prevUserReaction] = Math.max(0, (existingReactions[prevUserReaction] || 1) - 1);
+                existingReactions[prevUserReaction] = Math.max(
+                  0,
+                  (existingReactions[prevUserReaction] || 1) - 1,
+                );
               }
               existingReactions[reaction] = (existingReactions[reaction] || 0) + 1;
               userMap[currentUser.id] = reaction;
             }
-
             const totalLikes = Math.max(
               Object.keys(userMap).length,
-              Object.values(existingReactions).reduce((sum, count) => (sum || 0) + (count || 0), 0) || 0,
+              Object.values(existingReactions).reduce((sum, count) => (sum || 0) + (count || 0), 0) ||
+                0,
             );
-
             return {
-              ...c,
+              ...r,
               userReactions: userMap,
               userReaction: userMap[currentUser.id] || null,
               isLiked: Boolean(userMap[currentUser.id]),
               reactions: existingReactions,
               likesCount: totalLikes,
             };
+          });
+          return { ...c, replies: updatedReplies };
+        }
+
+        if (c.id === commentId) {
+          const userMap: Record<string, ReactionType> = { ...(c.userReactions || {}) };
+          if (c.userReaction && !userMap[currentUser.id] && c.author.id === currentUser.id) {
+            userMap[currentUser.id] = c.userReaction;
           }
+          const prevUserReaction = userMap[currentUser.id] || null;
+          const existingReactions: Partial<Record<ReactionType, number>> = {
+            ...(c.reactions || {}),
+          };
+          if (prevUserReaction === reaction) {
+            existingReactions[reaction] = Math.max(0, (existingReactions[reaction] || 1) - 1);
+            delete userMap[currentUser.id];
+          } else {
+            if (prevUserReaction) {
+              existingReactions[prevUserReaction] = Math.max(
+                0,
+                (existingReactions[prevUserReaction] || 1) - 1,
+              );
+            }
+            existingReactions[reaction] = (existingReactions[reaction] || 0) + 1;
+            userMap[currentUser.id] = reaction;
+          }
+          const totalLikes = Math.max(
+            Object.keys(userMap).length,
+            Object.values(existingReactions).reduce((sum, count) => (sum || 0) + (count || 0), 0) ||
+              0,
+          );
+          return {
+            ...c,
+            userReactions: userMap,
+            userReaction: userMap[currentUser.id] || null,
+            isLiked: Boolean(userMap[currentUser.id]),
+            reactions: existingReactions,
+            likesCount: totalLikes,
+          };
+        }
 
-          return c;
-        });
+        return c;
+      });
 
-        return { ...post, comments: updatedComments };
+    const targetPost = posts.find((p) => p.id === postId);
+    if (targetPost) {
+      const updatedForCloud = computeUpdatedComments(targetPost);
+      updatePostInFirestoreCloud(postId, {
+        comments: updatedForCloud,
+        commentsCount: updatedForCloud.length,
+      }).catch(() => {});
+    }
+
+    setPosts((prev) => {
+      const next = prev.map((post) => {
+        if (post.id !== postId) return post;
+        return { ...post, comments: computeUpdatedComments(post) };
       });
       saveStateToDB('bandhan_posts', next);
       return next;
@@ -2505,7 +3074,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: `post_share_${Date.now()}`,
       author: currentUser,
       createdAt: language === 'bn' ? 'এইমাত্র' : 'Just now',
-      content: language === 'bn' ? `শেয়ার করা হয়েছে: "${postToShare.author.name}" এর পোস্ট` : `Shared post from ${postToShare.author.name}`,
+      content:
+        language === 'bn'
+          ? `শেয়ার করা হয়েছে: "${postToShare.author.name}" এর পোস্ট`
+          : `Shared post from ${postToShare.author.name}`,
       image: postToShare.image,
       video: postToShare.video,
       mediaType: postToShare.mediaType,
@@ -2517,11 +3089,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setPosts((prev) => {
-      const updated = prev.map((p) => (p.id === postId ? { ...p, sharesCount: p.sharesCount + 1 } : p));
+      const updated = prev.map((p) =>
+        p.id === postId ? { ...p, sharesCount: p.sharesCount + 1 } : p,
+      );
       const next = [sharedPost, ...updated];
       saveStateToDB('bandhan_posts', next);
       return next;
     });
+
+    updatePostInFirestoreCloud(postId, {
+      sharesCount: (postToShare.sharesCount || 0) + 1,
+    }).catch(() => {});
+    savePostToFirestoreCloud({
+      postId: sharedPost.id,
+      content: sharedPost.content,
+      privacy: sharedPost.privacy,
+      mediaUrl: sharedPost.image || sharedPost.video,
+      mediaType: sharedPost.mediaType,
+    }).catch(() => {});
+
     showToast(t.shared);
   };
 
@@ -2622,6 +3208,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveStateToDB('bandhan_stories', next);
       return next;
     });
+    deleteStoryFromFirestoreCloud(storyId).catch(() => {});
     showToast(language === 'bn' ? 'স্টোরিটি মুছে ফেলা হয়েছে' : 'Story deleted');
   };
 
@@ -2657,6 +3244,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveStateToDB('bandhan_stories', next);
       return next;
     });
+
+    reactToStoryCloud(storyId, emoji, {
+      userId: currentUser.id,
+      userName: currentUser.nameBn || currentUser.name,
+      userAvatar: currentUser.avatar,
+    }).catch(() => {});
 
     // Add to notification center so story reactions appear in NotificationCenter
     addNotification({
@@ -2845,6 +3438,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       audioUrl?: string;
       audioDuration?: number;
       mediaUrl?: string;
+      mediaType?: 'image' | 'video';
       replyTo?: { id: string; text: string; senderName: string };
     },
   ) => {
@@ -2857,6 +3451,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       audioUrl: options?.audioUrl,
       audioDuration: options?.audioDuration,
       mediaUrl: options?.mediaUrl,
+      mediaType: options?.mediaType,
       replyTo: options?.replyTo,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isRead: false,
@@ -2872,13 +3467,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       friendsCount: 0,
     };
 
-    setConversations((prev) => {
-      const targetFriend =
-        prev[friendId]?.friend ||
-        contacts.find((c) => c.id === friendId) ||
-        profiles.find((p) => p.id === friendId) ||
-        fallbackUser;
+    const targetFriend =
+      conversations[friendId]?.friend ||
+      contacts.find((c) => c.id === friendId) ||
+      profiles.find((p) => p.id === friendId) ||
+      fallbackUser;
 
+    setConversations((prev) => {
       const conv = prev[friendId] || {
         friend: targetFriend,
         isOnline: targetFriend.isOnline !== false,
@@ -2897,15 +3492,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     // Cloud Firestore Sync for real-time chat between accounts
-    const chatId = [currentUser.id, friendId].sort().join('_');
+    const chatId = getChatId(currentUser.id, friendId);
     sendChatMessageCloud(chatId, {
       id: newMsg.id,
       senderId: currentUser.id,
+      senderName: currentUser.nameBn || currentUser.name,
+      senderAvatar: currentUser.avatar,
       recipientId: friendId,
+      recipientName: targetFriend.nameBn || targetFriend.name,
+      recipientAvatar: targetFriend.avatar,
       text: newMsg.text,
       audioUrl: newMsg.audioUrl,
       audioDuration: newMsg.audioDuration,
       imageUrl: newMsg.mediaUrl,
+      mediaUrl: newMsg.mediaUrl,
+      mediaType: newMsg.mediaType,
+      replyTo: newMsg.replyTo,
     }).catch((err) => {
       console.warn('Chat message cloud sync notice:', err);
     });
@@ -2925,6 +3527,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveStateToDB('bandhan_conversations', next);
       return next;
     });
+    deleteChatMessageCloud(getChatId(currentUser.id, friendId), messageId).catch(() => {});
     showToast(language === 'bn' ? 'মেসেজ মুছে ফেলা হয়েছে' : 'Message removed');
   };
 
@@ -2943,62 +3546,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveStateToDB('bandhan_conversations', next);
       return next;
     });
+    clearChatMessagesCloud(getChatId(currentUser.id, friendId)).catch(() => {});
     showToast(language === 'bn' ? 'চ্যাট ইতিহাস পরিষ্কার করা হয়েছে' : 'Chat cleared');
   };
 
   const markConversationRead = (friendId: string) => {
+    const conv = conversations[friendId];
+    if (conv) {
+      const chatId = getChatId(currentUser.id, friendId);
+      conv.messages
+        .filter((m) => m.senderId === friendId && m.isRead === false)
+        .forEach((m) => {
+          markChatMessageSeenCloud(chatId, m.id).catch(() => {});
+        });
+    }
+
     setConversations((prev) => {
-      const conv = prev[friendId];
-      if (!conv || conv.unreadCount === 0) return prev;
+      const currentConv = prev[friendId];
+      if (!currentConv) return prev;
+      const hasUnread =
+        currentConv.unreadCount > 0 ||
+        currentConv.messages.some((m) => m.senderId === friendId && m.isRead === false);
+      if (!hasUnread) return prev;
       const next = {
         ...prev,
         [friendId]: {
-          ...conv,
+          ...currentConv,
           unreadCount: 0,
-          messages: conv.messages.map((m) => ({ ...m, isRead: true })),
+          messages: currentConv.messages.map((m) =>
+            m.senderId === friendId ? { ...m, isRead: true } : m,
+          ),
         },
       };
       saveStateToDB('bandhan_conversations', next);
       return next;
     });
   };
-
-  const syncCloudChatMessages = useCallback(
-    (friendId: string, cloudMessages: CloudChatMessage[]) => {
-      if (!cloudMessages || cloudMessages.length === 0) return;
-      setConversations((prev) => {
-        const existingConv = prev[friendId];
-        if (!existingConv) return prev;
-        const existingIds = new Set(existingConv.messages.map((m) => m.id));
-        const incoming: ChatMessage[] = cloudMessages
-          .filter((cm) => cm?.id && !existingIds.has(cm.id))
-          .map((cm) => ({
-            id: cm.id,
-            senderId: cm.senderId,
-            text: cm.text || '',
-            audioUrl: cm.audioUrl,
-            audioDuration: cm.audioDuration,
-            mediaUrl: cm.imageUrl,
-            timestamp: cm.timestamp
-              ? new Date(cm.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              : 'Just now',
-            isRead: true,
-          }));
-        if (incoming.length === 0) return prev;
-        const merged = [...existingConv.messages, ...incoming];
-        const next = {
-          ...prev,
-          [friendId]: {
-            ...existingConv,
-            messages: merged,
-          },
-        };
-        saveStateToDB('bandhan_conversations', next);
-        return next;
-      });
-    },
-    [],
-  );
 
   // Notifications
   const markNotificationRead = (id: string) => {
@@ -3146,6 +3729,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveStateToDB('bandhan_reels', next);
       return next;
     });
+    incrementReelSharesCloud(reelId).catch(() => {});
   };
 
   const incrementReelViews = (reelId: string) => {
@@ -3156,6 +3740,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveStateToDB('bandhan_reels', next);
       return next;
     });
+    incrementReelViewsCloud(reelId).catch(() => {});
   };
 
   const addReelComment = (reelId: string, content: string) => {
@@ -3182,6 +3767,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return next;
     });
 
+    addReelCommentCloud(reelId, newComment).catch(() => {});
     showToast(language === 'bn' ? 'ভিডিওতে আপনার কমেন্ট যুক্ত হয়েছে!' : 'Comment added to video!');
   };
 
@@ -3206,6 +3792,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     saveReelToFirestoreCloud({
       id: newReel.id,
       videoUrl: newReel.videoUrl || '',
+      posterUrl: newReel.posterUrl,
       caption: newReel.description || '',
       soundTitle: newReel.songTitle,
     }).catch((err) => {
@@ -3319,6 +3906,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveStateToDB('bandhan_group_chats', next);
       return next;
     });
+
+    sendGroupChatMessageCloud(groupId, {
+      id: myMsg.id,
+      senderName: myMsg.senderName,
+      senderAvatar: myMsg.senderAvatar,
+      text: myMsg.text,
+    }).catch(() => {});
   };
 
   // Filter out blocked users from all platform content and sort pinned posts first
@@ -3472,6 +4066,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSearchQuery,
         toast,
         showToast,
+        appScale,
+        setAppScale,
+        cloudSyncStatus: {
+          isConnected: Boolean(firebaseUserEmail),
+          lastSyncAt: cloudLastSyncAt,
+          diagnostics: getFirebaseDiagnostics(),
+        },
+        forceCloudResync,
       }}
     >
       {children}

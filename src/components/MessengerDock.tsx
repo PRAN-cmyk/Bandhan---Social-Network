@@ -15,15 +15,29 @@ import {
   Trash2,
   Reply,
   Eraser,
+  Search,
+  Copy,
+  Loader2,
 } from 'lucide-react';
-import { uploadMediaToCloudinary } from '../utils/cloudinary';
+import { uploadMediaToCloudinary, isVideoFile as checkIsVideoFile } from '../utils/cloudinary';
 import { useApp } from '../context/AppContext';
 import {
+  getChatId,
+  isCloudPlayableUrl,
   uploadVoiceNoteToStorage,
   setChatTypingStatusCloud,
   subscribeToChatTypingStatusCloud,
   subscribeToChatMessagesCloud,
+  markChatMessageSeenCloud,
 } from '../firebase';
+import { SmartVideo } from './SmartVideo';
+import { SmartImage } from './SmartImage';
+
+const MESSENGER_EMOJI_CATEGORIES: Record<'smileys' | 'hearts' | 'gestures', string[]> = {
+  smileys: ['😊', '😂', '🥰', '😍', '😎', '🥳', '😭', '😅', '🤔', '🤩', '🙌', '✨'],
+  hearts: ['❤️', '💖', '💕', '💘', '💜', '💙', '🔥', '🌟', '🎉', '🌸', '💐', '🥂'],
+  gestures: ['👍', '👏', '🙏', '🤝', '💪', '✌️', '👌', '👋', '🫡', '🫶', '💯', '🚀'],
+};
 
 export const MessengerDock: React.FC = () => {
   const {
@@ -35,6 +49,7 @@ export const MessengerDock: React.FC = () => {
     sendMessage,
     deleteMessage,
     clearConversation,
+    markConversationRead,
     syncCloudChatMessages,
     showToast,
     startCall,
@@ -68,6 +83,41 @@ export const MessengerDock: React.FC = () => {
   const [replyingToMap, setReplyingToMap] = useState<
     Record<string, { id: string; text: string; senderName: string } | null>
   >({});
+  const [openEmojiFriendId, setOpenEmojiFriendId] = useState<string | null>(null);
+  const [emojiCategory, setEmojiCategory] = useState<'smileys' | 'hearts' | 'gestures'>('smileys');
+  const [chatSearchOpenMap, setChatSearchOpenMap] = useState<Record<string, boolean>>({});
+  const [chatSearchQueryMap, setChatSearchQueryMap] = useState<Record<string, string>>({});
+  const [uploadingChatMap, setUploadingChatMap] = useState<Record<string, number | null>>({});
+  const [typingPrefEnabled, setTypingPrefEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('bandhan_pref_typing') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const [readReceiptsPrefEnabled, setReadReceiptsPrefEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('bandhan_pref_read_receipts') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const markedSeenIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const syncPrefs = () => {
+      try {
+        setTypingPrefEnabled(localStorage.getItem('bandhan_pref_typing') !== 'false');
+        setReadReceiptsPrefEnabled(localStorage.getItem('bandhan_pref_read_receipts') !== 'false');
+      } catch {}
+    };
+    window.addEventListener('bandhan-prefs-updated', syncPrefs);
+    window.addEventListener('storage', syncPrefs);
+    return () => {
+      window.removeEventListener('bandhan-prefs-updated', syncPrefs);
+      window.removeEventListener('storage', syncPrefs);
+    };
+  }, []);
 
   const startVoiceRecording = async (friendId: string) => {
     try {
@@ -105,7 +155,7 @@ export const MessengerDock: React.FC = () => {
     if (!isAuthenticated || activeChatIds.length === 0) return;
     const unsubs: (() => void)[] = [];
     activeChatIds.forEach((friendId) => {
-      const chatId = [currentUser.id, friendId].sort().join('_');
+      const chatId = getChatId(currentUser.id, friendId);
       const unsubTyping = subscribeToChatTypingStatusCloud(chatId, (users) => {
         const isPeerTyping = users.some((u) => u.userId === friendId);
         setTypingMap((prev) => ({ ...prev, [friendId]: isPeerTyping }));
@@ -144,10 +194,46 @@ export const MessengerDock: React.FC = () => {
     prevGroupChatIdRef.current = activeGroupChatId;
   }, [activeGroupChatId]);
 
+  // Auto-mark open non-minimized chats as read & send cloud read receipts
+  useEffect(() => {
+    activeChatIds.forEach((friendId) => {
+      if (minimizedIds.includes(friendId)) return;
+      const conv = conversations[friendId];
+      if (!conv) return;
+
+      if (conv.unreadCount > 0) {
+        markConversationRead(friendId);
+      }
+
+      if (isAuthenticated && readReceiptsPrefEnabled) {
+        const chatId = getChatId(currentUser.id, friendId);
+        conv.messages.forEach((msg) => {
+          if (
+            msg.senderId === friendId &&
+            msg.isRead === false &&
+            !markedSeenIdsRef.current.has(msg.id)
+          ) {
+            markedSeenIdsRef.current.add(msg.id);
+            markChatMessageSeenCloud(chatId, msg.id).catch(() => {});
+          }
+        });
+      }
+    });
+  }, [
+    activeChatIds,
+    minimizedIds,
+    conversations,
+    currentUser.id,
+    isAuthenticated,
+    readReceiptsPrefEnabled,
+    markConversationRead,
+  ]);
+
   const handleInputChange = (friendId: string, val: string) => {
     setInputs((prev) => ({ ...prev, [friendId]: val }));
 
-    const chatId = [currentUser.id, friendId].sort().join('_');
+    if (!isAuthenticated || !typingPrefEnabled) return;
+    const chatId = getChatId(currentUser.id, friendId);
     setChatTypingStatusCloud(chatId, true, currentUser.name).catch(() => {});
 
     if (typingTimerRef.current[friendId]) {
@@ -166,7 +252,7 @@ export const MessengerDock: React.FC = () => {
       rec.onstop = async () => {
         try {
           const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          const chatId = [currentUser.id, friendId].sort().join('_');
+          const chatId = getChatId(currentUser.id, friendId);
           const audioUrl = await uploadVoiceNoteToStorage(blob, chatId);
           const durStr = `${Math.floor(dur / 60)}:${(dur % 60).toString().padStart(2, '0')}`;
           sendMessage(friendId, `🎙️ Voice Note (${durStr})`, { audioUrl, audioDuration: dur });
@@ -228,6 +314,13 @@ export const MessengerDock: React.FC = () => {
   const handleSend = (friendId: string, customText?: string) => {
     const textToSend = customText ?? inputs[friendId] ?? '';
     if (!textToSend.trim()) return;
+    if (typingTimerRef.current[friendId]) {
+      clearTimeout(typingTimerRef.current[friendId]);
+      delete typingTimerRef.current[friendId];
+    }
+    if (isAuthenticated) {
+      setChatTypingStatusCloud(getChatId(currentUser.id, friendId), false).catch(() => {});
+    }
     const replyQuote = replyingToMap[friendId] || undefined;
     sendMessage(friendId, textToSend, replyQuote ? { replyTo: replyQuote } : undefined);
     if (!customText) {
@@ -292,10 +385,11 @@ export const MessengerDock: React.FC = () => {
           >
             <div className="flex items-center gap-2 min-w-0">
               <div className="relative shrink-0">
-                <img
+                <SmartImage
                   src={activeGroup.coverImage}
                   alt={activeGroup.name}
-                  referrerPolicy="no-referrer"
+                  fallbackType="avatar"
+                  fallbackLabel={activeGroup.name}
                   className="w-8 h-8 rounded-full object-cover border border-white/40"
                 />
                 <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-400 border-2 border-indigo-600 rounded-full" />
@@ -344,10 +438,11 @@ export const MessengerDock: React.FC = () => {
                       className={`flex items-end gap-2 ${isMe ? 'justify-end' : 'justify-start'}`}
                     >
                       {!isMe && (
-                        <img
+                        <SmartImage
                           src={msg.senderAvatar}
                           alt={msg.senderName}
-                          referrerPolicy="no-referrer"
+                          fallbackType="avatar"
+                          fallbackLabel={msg.senderName}
                           className="w-6 h-6 rounded-full object-cover shrink-0"
                         />
                       )}
@@ -454,10 +549,11 @@ export const MessengerDock: React.FC = () => {
                   }}
                   className="relative shrink-0 cursor-pointer"
                 >
-                  <img
+                  <SmartImage
                     src={conv.friend.avatar}
                     alt={friendName}
-                    referrerPolicy="no-referrer"
+                    fallbackType="avatar"
+                    fallbackLabel={friendName}
                     className="w-8 h-8 rounded-full object-cover hover:opacity-90 transition-opacity"
                   />
                   <span
@@ -495,6 +591,23 @@ export const MessengerDock: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setChatSearchOpenMap((prev) => ({
+                      ...prev,
+                      [friendId]: !prev[friendId],
+                    }))
+                  }
+                  className={`p-1.5 rounded-full transition-colors cursor-pointer ${
+                    chatSearchOpenMap[friendId]
+                      ? 'bg-blue-100 dark:bg-blue-950 text-blue-600'
+                      : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                  title={language === 'bn' ? 'মেসেজ খুঁজুন' : 'Search messages'}
+                >
+                  <Search className="w-3.5 h-3.5" />
+                </button>
                 <button
                   onClick={() => startCall(conv.friend, 'audio')}
                   className="p-1.5 rounded-full text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
@@ -534,15 +647,44 @@ export const MessengerDock: React.FC = () => {
               </div>
             </div>
 
+            {/* Collapsible In-Chat Search Bar */}
+            {!isMinimized && chatSearchOpenMap[friendId] && (
+              <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 flex items-center gap-1.5 shrink-0">
+                <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <input
+                  type="text"
+                  value={chatSearchQueryMap[friendId] || ''}
+                  onChange={(e) =>
+                    setChatSearchQueryMap((prev) => ({ ...prev, [friendId]: e.target.value }))
+                  }
+                  placeholder={language === 'bn' ? 'চ্যাটে মেসেজ খুঁজুন...' : 'Search in chat...'}
+                  className="flex-1 bg-transparent text-xs text-slate-800 dark:text-slate-100 focus:outline-none placeholder:text-slate-400"
+                  autoFocus
+                />
+                {chatSearchQueryMap[friendId] && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setChatSearchQueryMap((prev) => ({ ...prev, [friendId]: '' }))
+                    }
+                    className="p-0.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Chat Body & Footer */}
             {!isMinimized && (
               <>
                 <div className="flex-1 p-3 overflow-y-auto space-y-2.5 bg-slate-50/50 dark:bg-slate-950/50">
                   <div className="text-center py-2">
-                    <img
+                    <SmartImage
                       src={conv.friend.avatar}
                       alt={friendName}
-                      referrerPolicy="no-referrer"
+                      fallbackType="avatar"
+                      fallbackLabel={friendName}
                       className="w-11 h-11 rounded-full mx-auto mb-1 object-cover shadow-sm"
                     />
                     <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
@@ -559,186 +701,244 @@ export const MessengerDock: React.FC = () => {
                     </div>
                   )}
 
-                  {conv.messages.map((msg, idx) => {
-                    const isMe = msg.senderId === currentUser.id;
-                    const isLastMe =
-                      isMe &&
-                      (idx === conv.messages.length - 1 ||
-                        !conv.messages.slice(idx + 1).some((m) => m.senderId === currentUser.id));
+                  {(() => {
+                    const searchQuery = (chatSearchQueryMap[friendId] || '').trim().toLowerCase();
+                    const renderedMessages = searchQuery
+                      ? conv.messages.filter(
+                          (m) =>
+                            m.text.toLowerCase().includes(searchQuery) ||
+                            (m.replyTo?.text || '').toLowerCase().includes(searchQuery),
+                        )
+                      : conv.messages;
 
-                    return (
-                      <div key={msg.id} className="space-y-1">
-                        <div
-                          className={`group/msg flex items-end gap-1.5 ${isMe ? 'justify-end' : 'justify-start'}`}
-                        >
-                          {!isMe && (
-                            <img
-                              src={conv.friend.avatar}
-                              alt={friendName}
-                              referrerPolicy="no-referrer"
-                              className="w-6 h-6 rounded-full object-cover shrink-0"
-                            />
-                          )}
+                    if (searchQuery && renderedMessages.length === 0) {
+                      return (
+                        <div className="py-4 px-3 text-center text-[11px] text-slate-400">
+                          {language === 'bn'
+                            ? `"${chatSearchQueryMap[friendId]}" খুঁজে পাওয়া যায়নি`
+                            : `No messages matching "${chatSearchQueryMap[friendId]}"`}
+                        </div>
+                      );
+                    }
 
-                          {isMe && (
-                            <div className="opacity-80 sm:opacity-0 sm:group-hover/msg:opacity-100 flex items-center gap-0.5 transition-opacity shrink-0">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setReplyingToMap((prev) => ({
-                                    ...prev,
-                                    [friendId]: {
-                                      id: msg.id,
-                                      text: msg.text || (msg.audioUrl ? '🎙️ Voice Note' : '📎 Attachment'),
-                                      senderName: currentUser.name,
-                                    },
-                                  }))
-                                }
-                                title={language === 'bn' ? 'উত্তর দিন' : 'Reply'}
-                                className="p-1 rounded-full text-slate-400 hover:text-blue-500 cursor-pointer"
-                              >
-                                <Reply className="w-3 h-3" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => deleteMessage(friendId, msg.id)}
-                                title={language === 'bn' ? 'মুছুন' : 'Unsend'}
-                                className="p-1 rounded-full text-slate-400 hover:text-rose-500 cursor-pointer"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </div>
-                          )}
+                    return renderedMessages.map((msg, idx) => {
+                      const isMe = msg.senderId === currentUser.id;
+                      const isLastMe =
+                        isMe &&
+                        (idx === renderedMessages.length - 1 ||
+                          !renderedMessages.slice(idx + 1).some((m) => m.senderId === currentUser.id));
+                      const isVideoAttachment = Boolean(
+                        msg.mediaUrl &&
+                          (msg.mediaType === 'video' ||
+                            /\/video\/upload\//i.test(msg.mediaUrl) ||
+                            /\.(mp4|webm|mov|m4v|mkv|3gp)(\?|$)/i.test(msg.mediaUrl) ||
+                            msg.mediaUrl.startsWith('data:video/')),
+                      );
 
+                      const handleCopyMsg = () => {
+                        const txt = msg.text || msg.mediaUrl || '';
+                        if (!txt) return;
+                        navigator.clipboard?.writeText?.(txt);
+                        showToast(language === 'bn' ? 'মেসেজ কপি হয়েছে' : 'Message copied');
+                      };
+
+                      return (
+                        <div key={msg.id} className="space-y-1">
                           <div
-                            className={`max-w-[76%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
-                              isMe
-                                ? 'bg-blue-600 text-white rounded-br-xs shadow-xs'
-                                : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200/70 dark:border-slate-700 rounded-bl-xs'
-                            }`}
+                            className={`group/msg flex items-end gap-1.5 ${isMe ? 'justify-end' : 'justify-start'}`}
                           >
-                            {msg.replyTo && (
-                              <div
-                                className={`mb-1.5 px-2 py-1 rounded-lg border-l-2 text-[10px] ${
-                                  isMe
-                                    ? 'bg-blue-700/60 border-blue-200 text-blue-100'
-                                    : 'bg-slate-100 dark:bg-slate-700/70 border-blue-500 text-slate-600 dark:text-slate-300'
-                                }`}
-                              >
-                                <span className="font-bold block truncate">{msg.replyTo.senderName}</span>
-                                <span className="line-clamp-1 opacity-90">{msg.replyTo.text}</span>
+                            {!isMe && (
+                              <SmartImage
+                                src={conv.friend.avatar}
+                                alt={friendName}
+                                fallbackType="avatar"
+                                fallbackLabel={friendName}
+                                className="w-6 h-6 rounded-full object-cover shrink-0"
+                              />
+                            )}
+
+                            {isMe && (
+                              <div className="opacity-80 sm:opacity-0 sm:group-hover/msg:opacity-100 flex items-center gap-0.5 transition-opacity shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={handleCopyMsg}
+                                  title={language === 'bn' ? 'কপি করুন' : 'Copy'}
+                                  className="p-1 rounded-full text-slate-400 hover:text-emerald-500 cursor-pointer"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setReplyingToMap((prev) => ({
+                                      ...prev,
+                                      [friendId]: {
+                                        id: msg.id,
+                                        text: msg.text || (msg.audioUrl ? '🎙️ Voice Note' : '📎 Attachment'),
+                                        senderName: currentUser.name,
+                                      },
+                                    }))
+                                  }
+                                  title={language === 'bn' ? 'উত্তর দিন' : 'Reply'}
+                                  className="p-1 rounded-full text-slate-400 hover:text-blue-500 cursor-pointer"
+                                >
+                                  <Reply className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteMessage(friendId, msg.id)}
+                                  title={language === 'bn' ? 'মুছুন' : 'Unsend'}
+                                  className="p-1 rounded-full text-slate-400 hover:text-rose-500 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
                               </div>
                             )}
 
-                            {msg.mediaUrl && (
-                              <div className="mb-1.5 overflow-hidden rounded-xl">
-                                {/\.(mp4|webm|mov|m4v)(\?|$)/i.test(msg.mediaUrl) ||
-                                msg.mediaUrl.startsWith('data:video/') ? (
-                                  <video
-                                    src={msg.mediaUrl}
-                                    controls
-                                    playsInline
-                                    preload="metadata"
-                                    className="w-52 max-w-full rounded-xl max-h-44 object-cover"
-                                  />
-                                ) : (
-                                  <img
-                                    src={msg.mediaUrl}
-                                    alt={msg.text || 'Attachment'}
-                                    referrerPolicy="no-referrer"
-                                    className="w-52 max-w-full rounded-xl max-h-48 object-cover"
-                                  />
+                            <div
+                              className={`max-w-[76%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
+                                isMe
+                                  ? 'bg-blue-600 text-white rounded-br-xs shadow-xs'
+                                  : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200/70 dark:border-slate-700 rounded-bl-xs'
+                              }`}
+                            >
+                              {msg.replyTo && (
+                                <div
+                                  className={`mb-1.5 px-2 py-1 rounded-lg border-l-2 text-[10px] ${
+                                    isMe
+                                      ? 'bg-blue-700/60 border-blue-200 text-blue-100'
+                                      : 'bg-slate-100 dark:bg-slate-700/70 border-blue-500 text-slate-600 dark:text-slate-300'
+                                  }`}
+                                >
+                                  <span className="font-bold block truncate">{msg.replyTo.senderName}</span>
+                                  <span className="line-clamp-1 opacity-90">{msg.replyTo.text}</span>
+                                </div>
+                              )}
+
+                              {msg.mediaUrl && (
+                                <div className="mb-1.5 overflow-hidden rounded-xl">
+                                  {isVideoAttachment ? (
+                                    <SmartVideo
+                                      src={msg.mediaUrl}
+                                      controls
+                                      playsInline
+                                      preload="metadata"
+                                      language={language}
+                                      containerClassName="w-52 max-w-full rounded-xl max-h-44 bg-black"
+                                      className="w-52 max-w-full rounded-xl max-h-44 object-cover"
+                                    />
+                                  ) : (
+                                    <SmartImage
+                                      src={msg.mediaUrl}
+                                      alt={msg.text || 'Attachment'}
+                                      fallbackType="media"
+                                      fallbackLabel={language === 'bn' ? 'ছবি লোড হয়নি' : 'Image unavailable'}
+                                      className="w-52 max-w-full rounded-xl max-h-48 object-cover"
+                                    />
+                                  )}
+                                </div>
+                              )}
+                              {msg.audioUrl ? (
+                                <div className="my-1.5 space-y-1">
+                                  <audio controls src={msg.audioUrl} className="w-52 h-8 max-w-full rounded-lg" />
+                                  <span className={`block text-[10px] font-semibold ${isMe ? 'text-blue-100' : 'text-slate-600 dark:text-slate-300'}`}>
+                                    🎙️ Voice Note
+                                  </span>
+                                </div>
+                              ) : (
+                                msg.text && <p className="break-words">{msg.text}</p>
+                              )}
+                              <div className="flex items-center justify-between gap-1.5 mt-0.5">
+                                <span
+                                  className={`block text-[9px] ${
+                                    isMe ? 'text-blue-200' : 'text-slate-400'
+                                  }`}
+                                >
+                                  {msg.timestamp}
+                                </span>
+                                {isMe && (
+                                  <span
+                                    className="inline-flex items-center"
+                                    title={msg.isRead !== false ? 'Seen' : 'Delivered'}
+                                  >
+                                    {msg.isRead !== false ? (
+                                      <CheckCheck className="w-3 h-3 text-blue-200 stroke-[2.5]" />
+                                    ) : (
+                                      <Check className="w-3 h-3 text-blue-200/75 stroke-[2]" />
+                                    )}
+                                  </span>
                                 )}
                               </div>
-                            )}
-                            {msg.audioUrl ? (
-                              <div className="my-1.5 space-y-1">
-                                <audio controls src={msg.audioUrl} className="w-52 h-8 max-w-full rounded-lg" />
-                                <span className={`block text-[10px] font-semibold ${isMe ? 'text-blue-100' : 'text-slate-600 dark:text-slate-300'}`}>
-                                  🎙️ Voice Note
-                                </span>
-                              </div>
-                            ) : (
-                              msg.text && <p className="break-words">{msg.text}</p>
-                            )}
-                            <div className="flex items-center justify-between gap-1.5 mt-0.5">
-                              <span
-                                className={`block text-[9px] ${
-                                  isMe ? 'text-blue-200' : 'text-slate-400'
-                                }`}
-                              >
-                                {msg.timestamp}
-                              </span>
-                              {isMe && (
-                                <span
-                                  className="inline-flex items-center"
-                                  title={msg.isRead !== false ? 'Seen' : 'Delivered'}
+                            </div>
+                            {!isMe && (
+                              <div className="opacity-80 sm:opacity-0 sm:group-hover/msg:opacity-100 flex items-center gap-0.5 transition-opacity shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={handleCopyMsg}
+                                  title={language === 'bn' ? 'কপি করুন' : 'Copy'}
+                                  className="p-1 rounded-full text-slate-400 hover:text-emerald-500 cursor-pointer"
                                 >
-                                  {msg.isRead !== false ? (
-                                    <CheckCheck className="w-3 h-3 text-blue-200 stroke-[2.5]" />
-                                  ) : (
-                                    <Check className="w-3 h-3 text-blue-200/75 stroke-[2]" />
-                                  )}
+                                  <Copy className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setReplyingToMap((prev) => ({
+                                      ...prev,
+                                      [friendId]: {
+                                        id: msg.id,
+                                        text: msg.text || (msg.audioUrl ? '🎙️ Voice Note' : '📎 Attachment'),
+                                        senderName: friendName,
+                                      },
+                                    }))
+                                  }
+                                  title={language === 'bn' ? 'উত্তর দিন' : 'Reply'}
+                                  className="p-1 rounded-full text-slate-400 hover:text-blue-500 cursor-pointer"
+                                >
+                                  <Reply className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Seen Read Receipt Indicator underneath last outgoing message */}
+                          {isLastMe && (
+                            <div className="flex items-center justify-end gap-1 pr-1 text-[10px] select-none animate-in fade-in duration-200">
+                              {msg.isRead !== false ? (
+                                <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 font-semibold">
+                                  <span className="text-[10px] text-blue-600 dark:text-blue-400">
+                                    {language === 'bn' ? 'দেখা হয়েছে (Seen)' : 'Seen'}
+                                  </span>
+                                  <SmartImage
+                                    src={conv.friend.avatar}
+                                    alt={conv.friend.name}
+                                    fallbackType="avatar"
+                                    fallbackLabel={friendName}
+                                    className="w-3.5 h-3.5 rounded-full object-cover ring-1 ring-blue-500/60"
+                                    title={`${friendName} ${language === 'bn' ? 'মেসেজটি দেখেছেন' : 'seen this message'}`}
+                                  />
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 flex items-center gap-0.5 text-[10px]">
+                                  <Check className="w-2.5 h-2.5 text-slate-400" />
+                                  <span>{language === 'bn' ? 'পৌঁছেছে' : 'Delivered'}</span>
                                 </span>
                               )}
                             </div>
-                          </div>
-                          {!isMe && (
-                            <div className="opacity-80 sm:opacity-0 sm:group-hover/msg:opacity-100 flex items-center gap-0.5 transition-opacity shrink-0">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setReplyingToMap((prev) => ({
-                                    ...prev,
-                                    [friendId]: {
-                                      id: msg.id,
-                                      text: msg.text || (msg.audioUrl ? '🎙️ Voice Note' : '📎 Attachment'),
-                                      senderName: friendName,
-                                    },
-                                  }))
-                                }
-                                title={language === 'bn' ? 'উত্তর দিন' : 'Reply'}
-                                className="p-1 rounded-full text-slate-400 hover:text-blue-500 cursor-pointer"
-                              >
-                                <Reply className="w-3 h-3" />
-                              </button>
-                            </div>
                           )}
                         </div>
-
-                        {/* Seen Read Receipt Indicator underneath last outgoing message */}
-                        {isLastMe && (
-                          <div className="flex items-center justify-end gap-1 pr-1 text-[10px] select-none animate-in fade-in duration-200">
-                            {msg.isRead !== false ? (
-                              <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 font-semibold">
-                                <span className="text-[10px] text-blue-600 dark:text-blue-400">
-                                  {language === 'bn' ? 'দেখা হয়েছে (Seen)' : 'Seen'}
-                                </span>
-                                <img
-                                  src={conv.friend.avatar}
-                                  alt={conv.friend.name}
-                                  className="w-3.5 h-3.5 rounded-full object-cover ring-1 ring-blue-500/60"
-                                  title={`${friendName} ${language === 'bn' ? 'মেসেজটি দেখেছেন' : 'seen this message'}`}
-                                />
-                              </div>
-                            ) : (
-                              <span className="text-slate-400 flex items-center gap-0.5 text-[10px]">
-                                <Check className="w-2.5 h-2.5 text-slate-400" />
-                                <span>{language === 'bn' ? 'পৌঁছেছে' : 'Delivered'}</span>
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                      );
+                    });
+                  })()}
 
                   {/* Live Typing Status Indicator */}
                   {typingMap[friendId] && (
                     <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 py-1 px-1 animate-in fade-in duration-150">
-                      <img
+                      <SmartImage
                         src={conv.friend.avatar}
                         alt={friendName}
+                        fallbackType="avatar"
+                        fallbackLabel={friendName}
                         className="w-5 h-5 rounded-full object-cover"
                       />
                       <div className="flex items-center gap-1.5 bg-slate-200 dark:bg-slate-800 px-3 py-1.5 rounded-2xl rounded-bl-xs">
@@ -783,7 +983,78 @@ export const MessengerDock: React.FC = () => {
                 )}
 
                 {/* Quick Emoji & Message Input */}
-                <div className="p-2 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shrink-0">
+                <div className="relative p-2 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shrink-0">
+                  {/* Attachment Upload Progress Bar */}
+                  {uploadingChatMap[friendId] !== null && uploadingChatMap[friendId] !== undefined && (
+                    <div className="mb-1.5 px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 flex items-center gap-2 text-[10px] text-blue-700 dark:text-blue-300 font-semibold">
+                      <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                      <span className="shrink-0">
+                        {language === 'bn' ? 'ফাইল পাঠানো হচ্ছে...' : 'Uploading...'} {uploadingChatMap[friendId]}%
+                      </span>
+                      <div className="flex-1 h-1 rounded-full bg-blue-200 dark:bg-blue-900 overflow-hidden">
+                        <div
+                          className="h-full bg-blue-600 transition-all duration-150"
+                          style={{ width: `${uploadingChatMap[friendId]}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Multi-Category Emoji Picker Popover */}
+                  {openEmojiFriendId === friendId && (
+                    <div className="absolute bottom-full right-2 mb-1.5 w-60 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 p-2.5 z-30">
+                      <div className="flex items-center justify-between gap-1 pb-1.5 mb-1.5 border-b border-slate-100 dark:border-slate-800">
+                        <div className="flex items-center gap-1">
+                          {(
+                            [
+                              { id: 'smileys', icon: '😊' },
+                              { id: 'hearts', icon: '❤️' },
+                              { id: 'gestures', icon: '👍' },
+                            ] as const
+                          ).map((cat) => (
+                            <button
+                              key={cat.id}
+                              type="button"
+                              onClick={() => setEmojiCategory(cat.id)}
+                              className={`px-2 py-0.5 rounded-lg text-xs cursor-pointer ${
+                                emojiCategory === cat.id
+                                  ? 'bg-blue-100 dark:bg-blue-950 text-blue-600'
+                                  : 'hover:bg-slate-100 dark:hover:bg-slate-800'
+                              }`}
+                            >
+                              {cat.icon}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setOpenEmojiFriendId(null)}
+                          className="p-0.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-6 gap-1">
+                        {MESSENGER_EMOJI_CATEGORIES[emojiCategory].map((emo) => (
+                          <button
+                            key={emo}
+                            type="button"
+                            onClick={() => {
+                              setInputs((prev) => ({
+                                ...prev,
+                                [friendId]: (prev[friendId] || '') + emo,
+                              }));
+                              inputRefs.current[friendId]?.focus();
+                            }}
+                            className="p-1 text-base rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-transform hover:scale-110"
+                          >
+                            {emo}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-1 pb-1.5 px-1 overflow-x-auto no-scrollbar">
                     {['👋 হাই!', '❤️', '🔥 দারুণ!', '😊 কেমন আছেন?', '👍'].map((quick) => (
                       <button
@@ -799,13 +1070,14 @@ export const MessengerDock: React.FC = () => {
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
+                      setOpenEmojiFriendId(null);
                       handleSend(friendId);
                     }}
                     className="flex items-center gap-1.5"
                   >
                     <label
                       className="p-1.5 rounded-full text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 cursor-pointer shrink-0"
-                      title={language === 'bn' ? 'ছবি বা ফাইল পাঠান' : 'Send Photo or File'}
+                      title={language === 'bn' ? 'ছবি বা ভিডিও পাঠান' : 'Send Photo or Video'}
                     >
                       <Paperclip className="w-4 h-4" />
                       <input
@@ -815,11 +1087,26 @@ export const MessengerDock: React.FC = () => {
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
+                          const isVid = checkIsVideoFile(file);
+                          setUploadingChatMap((prev) => ({ ...prev, [friendId]: 12 }));
                           try {
-                            const uploaded = await uploadMediaToCloudinary(file);
+                            const uploaded = await uploadMediaToCloudinary(file, {
+                              onProgress: (pct) =>
+                                setUploadingChatMap((prev) => ({ ...prev, [friendId]: pct })),
+                            });
                             const mediaUrl = uploaded.secureUrl || uploaded.url;
                             if (mediaUrl) {
-                              sendMessage(friendId, file.name, { mediaUrl });
+                              if (!isCloudPlayableUrl(mediaUrl)) {
+                                showToast(
+                                  language === 'bn'
+                                    ? 'মিডিয়া লোকালভাবে পাঠানো হয়েছে — অন্য ডিভাইসে দেখাতে Cloudinary কনফিগার করুন'
+                                    : 'Sent locally — configure Cloudinary so recipients on other devices can view media.',
+                                );
+                              }
+                              sendMessage(friendId, '', {
+                                mediaUrl,
+                                mediaType: isVid ? 'video' : 'image',
+                              });
                             } else {
                               showToast(
                                 language === 'bn'
@@ -833,6 +1120,8 @@ export const MessengerDock: React.FC = () => {
                                 ? 'ফাইল পাঠানো যায়নি, আবার চেষ্টা করুন'
                                 : 'Failed to send attachment',
                             );
+                          } finally {
+                            setUploadingChatMap((prev) => ({ ...prev, [friendId]: null }));
                           }
                           e.target.value = '';
                         }}
@@ -891,12 +1180,14 @@ export const MessengerDock: React.FC = () => {
                           <button
                             type="button"
                             onClick={() =>
-                              setInputs((prev) => ({
-                                ...prev,
-                                [friendId]: (prev[friendId] || '') + '😊',
-                              }))
+                              setOpenEmojiFriendId((prev) => (prev === friendId ? null : friendId))
                             }
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-amber-500 cursor-pointer"
+                            title={language === 'bn' ? 'ইমোজি বাছাই করুন' : 'Emoji picker'}
+                            className={`absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer ${
+                              openEmojiFriendId === friendId
+                                ? 'text-amber-500'
+                                : 'text-slate-400 hover:text-amber-500'
+                            }`}
                           >
                             <Smile className="w-3.5 h-3.5" />
                           </button>

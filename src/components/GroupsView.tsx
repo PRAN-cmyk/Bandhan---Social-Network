@@ -31,6 +31,7 @@ import { LiveStreamModal } from './LiveStreamModal';
 import { fileToDataUrl } from '../utils/storage';
 import { createAvatarUrl } from '../data/mockData';
 import coverSkylineImg from '../assets/images/profile_cover_skyline_1790115270776.jpg';
+import { SmartVideo } from './SmartVideo';
 
 export const GroupsView: React.FC = () => {
   const {
@@ -591,9 +592,12 @@ export const GroupsView: React.FC = () => {
                 {(groupPhotoPreview || groupVideoPreview) && (
                   <div className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-black">
                     {groupVideoPreview ? (
-                      <video
+                      <SmartVideo
                         src={groupVideoPreview}
                         controls
+                        playsInline
+                        language={language}
+                        containerClassName="w-full max-h-80 bg-black flex items-center justify-center"
                         className="w-full max-h-80 object-contain mx-auto"
                       />
                     ) : (
@@ -736,9 +740,12 @@ export const GroupsView: React.FC = () => {
                   >
                     <div className="aspect-video bg-black relative">
                       {p.video ? (
-                        <video
+                        <SmartVideo
                           src={p.video}
                           controls
+                          playsInline
+                          language={language}
+                          containerClassName="w-full h-full bg-black"
                           className="w-full h-full object-contain"
                         />
                       ) : (
@@ -1437,12 +1444,14 @@ export const GroupsView: React.FC = () => {
               {/* Video Stage */}
               <div className="relative h-60 rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 flex items-center justify-center">
                 {isGoogleVideoLive && !isCamOff ? (
-                  <video
+                  <SmartVideo
                     src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
                     autoPlay
                     loop
                     muted
                     playsInline
+                    language={language}
+                    containerClassName="w-full h-full bg-slate-900"
                     className="w-full h-full object-cover"
                   />
                 ) : (

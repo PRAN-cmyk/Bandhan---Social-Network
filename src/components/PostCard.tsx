@@ -38,6 +38,8 @@ import { useApp } from '../context/AppContext';
 import { ShareModal } from './ShareModal';
 import { PostInsightsModal } from './PostInsightsModal';
 import { LiveWatchModal } from './LiveWatchModal';
+import { SmartVideo } from './SmartVideo';
+import { SmartImage } from './SmartImage';
 import { createAvatarUrl } from '../data/mockData';
 
 interface PostCardProps {
@@ -435,10 +437,11 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
             onClick={() => viewUserProfile(post.author)}
             className="cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-full shrink-0"
           >
-            <img
+            <SmartImage
               src={post.author.avatar}
               alt={post.author.name}
-              referrerPolicy="no-referrer"
+              fallbackType="avatar"
+              fallbackLabel={post.author.name}
               className="w-10 h-10 rounded-full object-cover hover:opacity-90 transition-opacity"
             />
           </button>
@@ -872,17 +875,19 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
         <div className="mt-2 bg-black relative rounded-2xl overflow-hidden group select-none">
           {!videoError ? (
             <>
-              <video
+              <SmartVideo
                 ref={postVideoRef}
                 src={resolvedVideoSrc}
                 controls
                 playsInline
                 preload="metadata"
+                language={language}
+                containerClassName="relative w-full bg-black"
+                className="w-full max-h-[540px] object-contain"
                 onError={() => {
                   console.warn('Video failed to load in post, offering reload / live room');
                   setVideoError(true);
                 }}
-                className="w-full max-h-[540px] object-contain"
               />
 
               {/* 5-Second Rewind & Fast-Forward Control Bar (ভিডিও ৫ সেকেন্ড করে টানার ফিচার) */}
@@ -1001,11 +1006,12 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
         </div>
       ) : post.image ? (
         <div className="mt-2 bg-slate-100 dark:bg-slate-950">
-          <img
+          <SmartImage
             src={post.image}
             alt="Post media"
-            referrerPolicy="no-referrer"
-            className="w-full max-h-[540px] object-cover"
+            fallbackType="media"
+            fallbackLabel={language === 'bn' ? 'ছবি লোড হয়নি' : 'Image unavailable'}
+            className="w-full max-h-[380px] sm:max-h-[540px] object-cover"
           />
         </div>
       ) : null}
@@ -1330,10 +1336,11 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
           {/* Add New Comment input */}
           <form onSubmit={handleAddComment} className="space-y-2">
             <div className="flex items-center gap-2">
-              <img
+              <SmartImage
                 src={currentUser?.avatar || createAvatarUrl(currentUser?.name || 'User', '#1877F2', '#ffffff')}
                 alt={currentUser?.name || 'User'}
-                referrerPolicy="no-referrer"
+                fallbackType="avatar"
+                fallbackLabel={currentUser?.name || 'User'}
                 className="w-8 h-8 rounded-full object-cover shrink-0"
               />
               <div className="relative flex-1">
@@ -1488,10 +1495,11 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
               return (
                 <div key={comment.id} className="space-y-2">
                   <div className="flex items-start gap-2.5">
-                    <img
+                    <SmartImage
                       src={comment.author?.avatar || createAvatarUrl(comment.author?.name || 'User', '#1877F2', '#ffffff')}
                       alt={comment.author?.name || 'User'}
-                      referrerPolicy="no-referrer"
+                      fallbackType="avatar"
+                      fallbackLabel={comment.author?.name || 'User'}
                       className="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5"
                     />
                     <div className="flex-1">
@@ -1583,8 +1591,8 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
                           <button
                             type="button"
                             onClick={() => {
-                              if (comment.userReaction) {
-                                reactToComment(post.id, comment.id, comment.userReaction);
+                              if (myCommentReaction) {
+                                reactToComment(post.id, comment.id, myCommentReaction);
                               } else {
                                 reactToComment(post.id, comment.id, 'like');
                               }
@@ -1700,10 +1708,11 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
 
                             return (
                               <div key={reply.id} className="flex items-start gap-2">
-                                <img
+                                <SmartImage
                                   src={reply.author?.avatar || createAvatarUrl(reply.author?.name || 'User', '#1877F2', '#ffffff')}
                                   alt={reply.author?.name || 'User'}
-                                  referrerPolicy="no-referrer"
+                                  fallbackType="avatar"
+                                  fallbackLabel={reply.author?.name || 'User'}
                                   className="w-6 h-6 rounded-full object-cover shrink-0 mt-0.5"
                                 />
                                 <div className="flex-1">

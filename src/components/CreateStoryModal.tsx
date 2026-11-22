@@ -4,6 +4,8 @@ import { useApp } from '../context/AppContext';
 import { fileToDataUrl } from '../utils/storage';
 import { uploadMediaToCloudinary, isVideoFile as checkIsVideoFile } from '../utils/cloudinary';
 import { CloudinarySettingsModal } from './CloudinarySettingsModal';
+import { SmartVideo } from './SmartVideo';
+import { SmartImage } from './SmartImage';
 
 const GRADIENTS = [
   'from-blue-600 via-indigo-600 to-purple-700',
@@ -105,24 +107,39 @@ export const CreateStoryModal: React.FC = () => {
       });
 
       const resolvedUrl = result.secureUrl || result.url || localPersistentUrl;
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
       if (isVid) {
         setVideoPreview(resolvedUrl);
-        if (result.isCloudinary) {
-          showToast(
-            language === 'bn'
-              ? `ক্লাউডিনারি: ভিডিও (${(file.size / (1024 * 1024)).toFixed(1)} MB) সফলভাবে সিডিএন-এ আপলোড হয়েছে!`
-              : `Cloudinary Free Tier: Video (${(file.size / (1024 * 1024)).toFixed(1)} MB) uploaded to CDN!`,
-          );
-        }
       } else {
         setPhotoPreview(resolvedUrl);
-        if (result.isCloudinary) {
-          showToast(
-            language === 'bn'
-              ? 'ক্লাউডিনারি সিডিএন-এ ছবি সফলভাবে আপলোড হয়েছে!'
-              : 'Photo uploaded to Cloudinary Free CDN!',
-          );
-        }
+      }
+
+      if (result.storageMode === 'cloudinary') {
+        showToast(
+          language === 'bn'
+            ? isVid
+              ? `ক্লাউডিনারি: ভিডিও (${sizeMb} MB) সফলভাবে সিডিএন-এ আপলোড হয়েছে!`
+              : 'ক্লাউডিনারি সিডিএন-এ ছবি সফলভাবে আপলোড হয়েছে!'
+            : isVid
+            ? `Cloudinary Free Tier: Video (${sizeMb} MB) uploaded to CDN!`
+            : 'Photo uploaded to Cloudinary Free CDN!',
+        );
+      } else if (result.storageMode === 'firebase') {
+        showToast(
+          language === 'bn'
+            ? isVid
+              ? `ফায়ারবেস ক্লাউডে ভিডিও (${sizeMb} MB) আপলোড হয়েছে!`
+              : 'ফায়ারবেস ক্লাউডে ছবি আপলোড হয়েছে!'
+            : isVid
+            ? `Video (${sizeMb} MB) uploaded to Firebase cloud storage!`
+            : 'Photo uploaded to Firebase cloud storage!',
+        );
+      } else {
+        showToast(
+          language === 'bn'
+            ? 'স্টোরি মিডিয়া লোকাল ব্রাউজারে সেভ হয়েছে — লাইভে শেয়ারের জন্য ক্লাউডিনারি সেটআপ করুন।'
+            : 'Story saved locally on this browser — configure Cloudinary for cross-device playback.',
+        );
       }
     } catch {
       if (isVid) {
@@ -154,12 +171,27 @@ export const CreateStoryModal: React.FC = () => {
         resourceType: 'video',
         onProgress: (p) => setCloudinaryProgress(p),
       });
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
       setVideoPreview(result.secureUrl);
-      showToast(
-        language === 'bn'
-          ? `ক্লাউডিনারি: ভিডিও স্টোরি (${(file.size / (1024 * 1024)).toFixed(1)} MB) সফলভাবে আপলোড হয়েছে!`
-          : `Cloudinary Free Tier: Video story (${(file.size / (1024 * 1024)).toFixed(1)} MB) uploaded to CDN!`,
-      );
+      if (result.storageMode === 'cloudinary') {
+        showToast(
+          language === 'bn'
+            ? `ক্লাউডিনারি: ভিডিও স্টোরি (${sizeMb} MB) সফলভাবে আপলোড হয়েছে!`
+            : `Cloudinary Free Tier: Video story (${sizeMb} MB) uploaded to CDN!`,
+        );
+      } else if (result.storageMode === 'firebase') {
+        showToast(
+          language === 'bn'
+            ? `ফায়ারবেস ক্লাউডে ভিডিও স্টোরি (${sizeMb} MB) আপলোড হয়েছে!`
+            : `Video story (${sizeMb} MB) uploaded to Firebase cloud storage!`,
+        );
+      } else {
+        showToast(
+          language === 'bn'
+            ? 'ভিডিও স্টোরি লোকাল ব্রাউজারে সেভ হয়েছে — লাইভে দেখাতে ক্লাউডিনারি সেটিংস যাচাই করুন।'
+            : 'Video story saved locally — configure Cloudinary Settings to stream on live site.',
+        );
+      }
     } catch {
       const fallbackUrl = await fileToDataUrl(file);
       setVideoPreview(fallbackUrl);
@@ -324,9 +356,11 @@ export const CreateStoryModal: React.FC = () => {
 
                 {photoPreview ? (
                   <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-900">
-                    <img
+                    <SmartImage
                       src={photoPreview}
                       alt="Selected story preview"
+                      fallbackType="media"
+                      fallbackLabel="Story photo"
                       className="w-full h-40 object-cover"
                     />
                     <div className="p-2 bg-black/70 backdrop-blur-xs flex items-center justify-between gap-2 text-white">
@@ -579,7 +613,9 @@ export const CreateStoryModal: React.FC = () => {
               type="button"
               onClick={handleSubmit}
               disabled={
-                mode === 'text' ? !text.trim() : mode === 'photo' ? !photoPreview : !videoPreview
+                isUploading ||
+                isUploadingCloudinary ||
+                (mode === 'text' ? !text.trim() : mode === 'photo' ? !photoPreview : !videoPreview)
               }
               className="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-sm font-semibold rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-2"
             >
@@ -607,13 +643,15 @@ export const CreateStoryModal: React.FC = () => {
           <div className="w-48 h-80 rounded-2xl overflow-hidden shadow-xl relative border-2 border-slate-300 dark:border-slate-700 flex flex-col justify-center items-center text-center p-4 bg-black">
             {mode === 'video' && videoPreview ? (
               <>
-                <video
+                <SmartVideo
                   src={videoPreview}
                   autoPlay
                   loop
                   muted={isPreviewMuted}
                   playsInline
-                  className="absolute inset-0 w-full h-full object-cover"
+                  language={language}
+                  containerClassName="absolute inset-0 w-full h-full bg-black"
+                  className="w-full h-full object-cover"
                 />
                 <button
                   type="button"
@@ -624,10 +662,11 @@ export const CreateStoryModal: React.FC = () => {
                 </button>
               </>
             ) : mode === 'photo' && photoPreview ? (
-              <img
+              <SmartImage
                 src={photoPreview}
                 alt="Preview"
-                referrerPolicy="no-referrer"
+                fallbackType="media"
+                fallbackLabel="Story preview"
                 className="absolute inset-0 w-full h-full object-cover"
               />
             ) : (

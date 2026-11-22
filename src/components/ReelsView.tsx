@@ -22,6 +22,8 @@ import {
   Search,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { SmartVideo } from './SmartVideo';
+import { SmartImage } from './SmartImage';
 
 export const ReelsView: React.FC = () => {
   const {
@@ -394,18 +396,22 @@ export const ReelsView: React.FC = () => {
                       className="group relative aspect-[9/14] rounded-2xl overflow-hidden bg-slate-900 shadow-md cursor-pointer hover:ring-2 hover:ring-rose-500 transition-all"
                     >
                       {reel.videoUrl ? (
-                        <video
+                        <SmartVideo
                           src={reel.videoUrl}
                           poster={reel.posterUrl}
                           muted
                           playsInline
+                          compact
+                          language={language}
+                          containerClassName="relative w-full h-full bg-slate-900"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         />
                       ) : (
-                        <img
+                        <SmartImage
                           src={reel.posterUrl}
                           alt={reel.description}
-                          referrerPolicy="no-referrer"
+                          fallbackType="media"
+                          fallbackLabel={reel.author.name}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         />
                       )}
@@ -421,10 +427,11 @@ export const ReelsView: React.FC = () => {
                         </div>
                         <div>
                           <div className="flex items-center gap-1.5 mb-1">
-                            <img
+                            <SmartImage
                               src={reel.author.avatar}
                               alt={reel.author.name}
-                              referrerPolicy="no-referrer"
+                              fallbackType="avatar"
+                              fallbackLabel={reel.author.name}
                               className="w-5 h-5 rounded-full object-cover border border-white/50"
                             />
                             <span className="text-xs font-bold truncate">
@@ -543,18 +550,22 @@ export const ReelsView: React.FC = () => {
                   <div key={reel.id} className="py-3.5 flex items-center gap-3.5">
                     <div className="w-14 h-20 rounded-xl overflow-hidden bg-slate-900 shrink-0 relative border border-slate-200 dark:border-slate-700">
                       {reel.videoUrl ? (
-                        <video
+                        <SmartVideo
                           src={reel.videoUrl}
                           poster={reel.posterUrl}
                           muted
                           playsInline
+                          compact
+                          language={language}
+                          containerClassName="relative w-full h-full bg-slate-900"
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <img
+                        <SmartImage
                           src={reel.posterUrl}
                           alt={reel.description}
-                          referrerPolicy="no-referrer"
+                          fallbackType="media"
+                          fallbackLabel={reel.author.name}
                           className="w-full h-full object-cover"
                         />
                       )}
@@ -678,7 +689,7 @@ export const ReelsView: React.FC = () => {
                     setShowHeartBurst((prev) => ({ ...prev, [reel.id]: false }));
                   }, 750);
                 }}
-                className={`relative w-full aspect-[9/14] sm:aspect-[9/13] max-h-[720px] bg-black rounded-3xl overflow-hidden shadow-2xl flex flex-col justify-between transition-all ${
+                className={`relative w-full aspect-[9/14] sm:aspect-[9/13] max-h-[calc(100dvh-13rem)] sm:max-h-[720px] bg-black rounded-3xl overflow-hidden shadow-2xl flex flex-col justify-between transition-all ${
                   isCurrentActive
                     ? 'ring-2 ring-rose-500 shadow-rose-500/10'
                     : 'opacity-80 hover:opacity-95'
@@ -687,7 +698,7 @@ export const ReelsView: React.FC = () => {
                 {/* Reel Video or Poster - Strictly controlled via videoRefs so only 1 video plays */}
                 {reel.videoUrl ? (
                   <>
-                    <video
+                    <SmartVideo
                       ref={(el) => {
                         videoRefs.current[reel.id] = el;
                       }}
@@ -697,6 +708,8 @@ export const ReelsView: React.FC = () => {
                       preload="metadata"
                       muted={isMuted || !isCurrentlyPlaying}
                       playsInline
+                      language={language}
+                      containerClassName="absolute inset-0 w-full h-full bg-black"
                       onLoadedData={() => {
                         if (reelVideoErrors[reel.id]) {
                           setReelVideoErrors((prev) => ({ ...prev, [reel.id]: false }));
@@ -714,14 +727,15 @@ export const ReelsView: React.FC = () => {
                           setIsManualPaused(false);
                         }
                       }}
-                      className={`absolute inset-0 w-full h-full object-cover cursor-pointer ${
+                      className={`w-full h-full object-cover cursor-pointer ${
                         reelVideoErrors[reel.id] ? 'opacity-0 pointer-events-none' : ''
                       }`}
                     />
-                    <img
+                    <SmartImage
                       src={reel.posterUrl}
                       alt={reel.description}
-                      referrerPolicy="no-referrer"
+                      fallbackType="media"
+                      fallbackLabel={reel.author.name}
                       className="absolute inset-0 w-full h-full object-cover -z-10"
                     />
                     {reelVideoErrors[reel.id] && (
@@ -760,10 +774,11 @@ export const ReelsView: React.FC = () => {
                     )}
                   </>
                 ) : (
-                  <img
+                  <SmartImage
                     src={reel.posterUrl}
                     alt="Reel clip"
-                    referrerPolicy="no-referrer"
+                    fallbackType="media"
+                    fallbackLabel={reel.author.name}
                     className="absolute inset-0 w-full h-full object-cover"
                   />
                 )}
@@ -1031,10 +1046,11 @@ export const ReelsView: React.FC = () => {
                 <div className="relative z-10 p-4 sm:p-5 space-y-3">
                   {/* Author badge */}
                   <div className="flex items-center gap-3 pr-14">
-                    <img
+                    <SmartImage
                       src={reel.author.avatar}
                       alt={reel.author.name}
-                      referrerPolicy="no-referrer"
+                      fallbackType="avatar"
+                      fallbackLabel={reel.author.name}
                       onClick={() => viewUserProfile(reel.author)}
                       className="w-10 h-10 rounded-full border-2 border-white object-cover cursor-pointer"
                     />
@@ -1087,10 +1103,11 @@ export const ReelsView: React.FC = () => {
                       onClick={() => setOpenCommentsReelId(reel.id)}
                       className="bg-black/45 backdrop-blur-md border border-white/15 rounded-xl px-3 py-1.5 flex items-center gap-2 cursor-pointer hover:bg-black/60 transition-colors"
                     >
-                      <img
+                      <SmartImage
                         src={reel.comments[0].author.avatar}
                         alt={reel.comments[0].author.name}
-                        referrerPolicy="no-referrer"
+                        fallbackType="avatar"
+                        fallbackLabel={reel.comments[0].author.name}
                         className="w-5 h-5 rounded-full object-cover"
                       />
                       <p className="text-xs text-white/95 truncate">
@@ -1169,10 +1186,11 @@ export const ReelsView: React.FC = () => {
                       ) : (
                         reelComments.map((c) => (
                           <div key={c.id} className="flex items-start gap-2.5">
-                            <img
+                            <SmartImage
                               src={c.author.avatar}
                               alt={c.author.name}
-                              referrerPolicy="no-referrer"
+                              fallbackType="avatar"
+                              fallbackLabel={c.author.name}
                               className="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5"
                             />
                             <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-2xl px-3.5 py-2">
@@ -1215,10 +1233,11 @@ export const ReelsView: React.FC = () => {
                       onSubmit={(e) => handleCommentSubmit(e, reel.id)}
                       className="p-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2 bg-slate-50 dark:bg-slate-900/90"
                     >
-                      <img
+                      <SmartImage
                         src={currentUser.avatar}
                         alt={currentUser.name}
-                        referrerPolicy="no-referrer"
+                        fallbackType="avatar"
+                        fallbackLabel={currentUser.name}
                         className="w-8 h-8 rounded-full object-cover shrink-0"
                       />
                       <input

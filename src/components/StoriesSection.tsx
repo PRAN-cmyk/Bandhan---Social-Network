@@ -1,6 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { Plus, ChevronLeft, ChevronRight, Play, Clock, Heart, Music2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { SmartVideo } from './SmartVideo';
+import { SmartImage } from './SmartImage';
 
 export const StoriesSection: React.FC = () => {
   const {
@@ -66,13 +68,14 @@ export const StoriesSection: React.FC = () => {
         {/* Card 1: Create Story */}
         <div
           onClick={() => setIsCreateStoryOpen(true)}
-          className="relative shrink-0 w-28 sm:w-32 h-44 sm:h-52 rounded-2xl overflow-hidden shadow-sm border border-slate-200 dark:border-slate-800 cursor-pointer group bg-white dark:bg-slate-800 flex flex-col transition-transform hover:scale-[1.02]"
+          className="relative shrink-0 w-24 sm:w-32 h-40 sm:h-52 rounded-2xl overflow-hidden shadow-sm border border-slate-200 dark:border-slate-800 cursor-pointer group bg-white dark:bg-slate-800 flex flex-col transition-transform hover:scale-[1.02]"
         >
           <div className="h-3/4 w-full overflow-hidden bg-slate-100 dark:bg-slate-700">
-            <img
+            <SmartImage
               src={currentUser.avatar}
               alt={currentUser.name}
-              referrerPolicy="no-referrer"
+              fallbackType="avatar"
+              fallbackLabel={currentUser.name}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             />
           </div>
@@ -103,26 +106,27 @@ export const StoriesSection: React.FC = () => {
             <div
               key={story.id}
               onClick={() => setActiveStoryIndex(index)}
-              className="relative shrink-0 w-28 sm:w-32 h-44 sm:h-52 rounded-2xl overflow-hidden shadow-sm border border-slate-200 dark:border-slate-800 cursor-pointer group flex flex-col justify-between p-2.5 transition-transform hover:scale-[1.02] bg-slate-900"
+              className="relative shrink-0 w-24 sm:w-32 h-40 sm:h-52 rounded-2xl overflow-hidden shadow-sm border border-slate-200 dark:border-slate-800 cursor-pointer group flex flex-col justify-between p-2 sm:p-2.5 transition-transform hover:scale-[1.02] bg-slate-900"
             >
               {/* Story backdrop */}
               {isVideo && videoSrc ? (
-                <video
+                <SmartVideo
                   src={videoSrc}
                   muted
                   loop
                   autoPlay
                   playsInline
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
-                  className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  compact
+                  language={language}
+                  containerClassName="absolute inset-0 w-full h-full bg-slate-900"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />
               ) : story.mediaUrl ? (
-                <img
+                <SmartImage
                   src={story.mediaUrl}
                   alt="Story"
-                  referrerPolicy="no-referrer"
+                  fallbackType="media"
+                  fallbackLabel={story.author.name}
                   className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />
               ) : (
@@ -142,11 +146,12 @@ export const StoriesSection: React.FC = () => {
 
               {/* Top row: Author Avatar & 24h / Video Badge */}
               <div className="relative z-10 flex items-center justify-between">
-                <div className="w-9 h-9 rounded-full ring-3 ring-blue-500 p-0.5 bg-white dark:bg-slate-900 shadow-md">
-                  <img
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full ring-2 sm:ring-3 ring-blue-500 p-0.5 bg-white dark:bg-slate-900 shadow-md">
+                  <SmartImage
                     src={story.author.avatar}
                     alt={story.author.name}
-                    referrerPolicy="no-referrer"
+                    fallbackType="avatar"
+                    fallbackLabel={story.author.name}
                     className="w-full h-full rounded-full object-cover"
                   />
                 </div>

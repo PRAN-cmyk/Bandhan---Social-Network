@@ -32,9 +32,9 @@
         },
         "avatar": {
           "type": "string",
-          "description": "Avatar image URL.",
+          "description": "Avatar image URL or compact data URI.",
           "minLength": 1,
-          "maxLength": 2048
+          "maxLength": 700000
         },
         "bio": {
           "type": "string",
@@ -45,6 +45,10 @@
           "type": "string",
           "description": "City/location label.",
           "maxLength": 120
+        },
+        "isOnline": {
+          "type": "boolean",
+          "description": "Active presence indicator."
         },
         "createdAt": {
           "type": "string",
@@ -57,7 +61,7 @@
           "description": "Server update timestamp."
         }
       },
-      "required": ["uid", "name", "username", "avatar", "createdAt", "updatedAt"]
+      "required": ["uid", "name", "username", "avatar", "updatedAt"]
     },
     "UserPrivateInfo": {
       "title": "UserPrivateInfo",
@@ -74,7 +78,7 @@
         "email": {
           "type": "string",
           "format": "email",
-          "description": "Verified user email address.",
+          "description": "User email address.",
           "minLength": 3,
           "maxLength": 254
         },
@@ -88,7 +92,7 @@
     },
     "CloudPost": {
       "title": "CloudPost",
-      "description": "Social feed post synced to Firestore, optionally linked to a Google Drive file.",
+      "description": "Social feed post synced across accounts in Firestore.",
       "type": "object",
       "properties": {
         "authorId": {
@@ -108,7 +112,7 @@
           "type": "string",
           "description": "Avatar URL of the post creator.",
           "minLength": 1,
-          "maxLength": 2048
+          "maxLength": 700000
         },
         "content": {
           "type": "string",
@@ -121,6 +125,82 @@
           "description": "Visibility setting for the post.",
           "enum": ["public", "friends", "only_me"],
           "maxLength": 20
+        },
+        "mediaUrl": {
+          "type": "string",
+          "description": "Cloud-playable image or video URL.",
+          "maxLength": 700000
+        },
+        "mediaType": {
+          "type": "string",
+          "description": "Attached media MIME category.",
+          "maxLength": 20
+        },
+        "gradientBg": {
+          "type": "string",
+          "description": "Gradient CSS class for text posts.",
+          "maxLength": 160
+        },
+        "location": {
+          "type": "string",
+          "description": "Post check-in location.",
+          "maxLength": 160
+        },
+        "feeling": {
+          "type": "object",
+          "description": "Optional feeling/activity metadata."
+        },
+        "isLive": {
+          "type": "boolean",
+          "description": "Whether the post represents a live stream."
+        },
+        "poll": {
+          "type": "object",
+          "description": "Optional interactive poll data and votes."
+        },
+        "scheduledFor": {
+          "type": "string",
+          "description": "ISO timestamp for scheduled release.",
+          "maxLength": 64
+        },
+        "expiresAt": {
+          "type": "string",
+          "description": "Optional expiration timestamp.",
+          "maxLength": 64
+        },
+        "musicTitle": {
+          "type": "string",
+          "description": "Optional attached music track title.",
+          "maxLength": 120
+        },
+        "audioUrl": {
+          "type": "string",
+          "description": "Optional attached audio URL.",
+          "maxLength": 700000
+        },
+        "reactions": {
+          "type": "object",
+          "description": "Aggregated reaction counts."
+        },
+        "userReactions": {
+          "type": "object",
+          "description": "Map of userId to selected reaction type."
+        },
+        "reactionsCount": {
+          "type": "number",
+          "description": "Total reaction count."
+        },
+        "comments": {
+          "type": "array",
+          "description": "Post comments and nested replies."
+        },
+        "commentsCount": {
+          "type": "number",
+          "description": "Total comment count."
+        },
+        "sharesCount": {
+          "type": "number",
+          "description": "Total share count."
         },
         "driveFileId": {
           "type": "string",
@@ -137,6 +217,10 @@
           "description": "Optional Google Drive webViewLink URL.",
           "maxLength": 2048
         },
+        "timestampMs": {
+          "type": "number",
+          "description": "Epoch milliseconds for feed ordering."
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",
@@ -148,7 +232,479 @@
           "description": "Server update timestamp."
         }
       },
-      "required": ["authorId", "authorName", "authorAvatar", "content", "privacy", "createdAt", "updatedAt"]
+      "required": ["authorId", "authorName", "authorAvatar", "content", "privacy", "updatedAt"]
+    },
+    "CloudStory": {
+      "title": "CloudStory",
+      "description": "24-hour ephemeral story shared across Bandhan accounts.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "authorAvatar": {
+          "type": "string",
+          "maxLength": 700000
+        },
+        "mediaUrl": {
+          "type": "string",
+          "maxLength": 700000
+        },
+        "videoUrl": {
+          "type": "string",
+          "maxLength": 700000
+        },
+        "mediaType": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "gradientBg": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "audioUrl": {
+          "type": "string",
+          "maxLength": 700000
+        },
+        "audioTitle": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "audioArtist": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "reactions": {
+          "type": "object"
+        },
+        "userReactions": {
+          "type": "object"
+        },
+        "reactionUsers": {
+          "type": "array"
+        },
+        "timestampMs": {
+          "type": "number"
+        },
+        "expiresAt": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "authorId", "authorName", "expiresAt"]
+    },
+    "CloudReel": {
+      "title": "CloudReel",
+      "description": "Short-form video reel synced across Bandhan accounts.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "authorAvatar": {
+          "type": "string",
+          "maxLength": 700000
+        },
+        "videoUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 700000
+        },
+        "posterUrl": {
+          "type": "string",
+          "maxLength": 700000
+        },
+        "caption": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "soundTitle": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "likesCount": {
+          "type": "number"
+        },
+        "likedUserIds": {
+          "type": "array"
+        },
+        "viewsCount": {
+          "type": "number"
+        },
+        "sharesCount": {
+          "type": "number"
+        },
+        "commentsCount": {
+          "type": "number"
+        },
+        "comments": {
+          "type": "array"
+        },
+        "reactions": {
+          "type": "object"
+        },
+        "userReactions": {
+          "type": "object"
+        },
+        "timestampMs": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "authorId", "authorName", "videoUrl"]
+    },
+    "CloudChat": {
+      "title": "CloudChat",
+      "description": "1-on-1 Messenger thread summary document.",
+      "type": "object",
+      "properties": {
+        "chatId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "participants": {
+          "type": "array"
+        },
+        "participantProfiles": {
+          "type": "object"
+        },
+        "lastMessageText": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "lastSenderId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "lastSenderName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "lastTimestamp": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["chatId", "participants"]
+    },
+    "CloudChatMessage": {
+      "title": "CloudChatMessage",
+      "description": "Individual message inside a 1-on-1 Messenger thread.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "senderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "senderName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "senderAvatar": {
+          "type": "string",
+          "maxLength": 700000
+        },
+        "recipientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "audioUrl": {
+          "type": "string",
+          "maxLength": 700000
+        },
+        "audioDuration": {
+          "type": "number"
+        },
+        "imageUrl": {
+          "type": "string",
+          "maxLength": 700000
+        },
+        "mediaUrl": {
+          "type": "string",
+          "maxLength": 700000
+        },
+        "mediaType": {
+          "type": "string",
+          "enum": ["image", "video"],
+          "maxLength": 20
+        },
+        "replyToId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "replyTo": {
+          "type": "object"
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "isRead": {
+          "type": "boolean"
+        },
+        "seenAt": {
+          "type": "number"
+        },
+        "seenBy": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "senderId", "recipientId", "timestamp"]
+    },
+    "CloudChatTyping": {
+      "title": "CloudChatTyping",
+      "description": "Real-time typing indicator document for a participant.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "userName": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "isTyping": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": ["userId", "isTyping", "updatedAt"]
+    },
+    "CloudGroupChatMessage": {
+      "title": "CloudGroupChatMessage",
+      "description": "Message inside a Bandhan community group chat room.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "groupId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "senderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "senderName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "senderAvatar": {
+          "type": "string",
+          "maxLength": 700000
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "groupId", "senderId", "text", "timestamp"]
+    },
+    "CloudCall": {
+      "title": "CloudCall",
+      "description": "WebRTC audio/video call signaling session.",
+      "type": "object",
+      "properties": {
+        "callId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "caller": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "callee": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "offer": {
+          "type": "object"
+        },
+        "answer": {
+          "type": "object"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["calling", "connected", "ended"],
+          "maxLength": 32
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "answeredAt": {
+          "type": "number"
+        }
+      },
+      "required": ["callId", "caller", "callee", "status", "createdAt"]
+    },
+    "CloudCallCandidate": {
+      "title": "CloudCallCandidate",
+      "description": "ICE candidate for a WebRTC call session.",
+      "type": "object",
+      "properties": {
+        "candidate": {
+          "type": "object"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["caller", "callee"],
+          "maxLength": 16
+        },
+        "timestamp": {
+          "type": "number"
+        }
+      },
+      "required": ["candidate", "role", "timestamp"]
+    },
+    "CloudNote": {
+      "title": "CloudNote",
+      "description": "Owner-only personal cloud note.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 10000
+        },
+        "color": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "isPinned": {
+          "type": "boolean"
+        },
+        "tags": {
+          "type": "array"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": ["id", "userId", "updatedAt"]
+    },
+    "CloudAlbum": {
+      "title": "CloudAlbum",
+      "description": "User photo album stored in Firestore.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "photos": {
+          "type": "array"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": ["id", "userId", "name"]
     }
   },
   "firestore": {
@@ -162,7 +718,47 @@
     },
     "/cloudPosts/{postId}": {
       "schema": { "$ref": "#/entities/CloudPost" },
-      "description": "Cloud-synced posts and Google Drive shared items."
+      "description": "Cloud-synced feed posts and Google Drive shared items."
+    },
+    "/cloudStories/{storyId}": {
+      "schema": { "$ref": "#/entities/CloudStory" },
+      "description": "24-hour cloud stories visible across accounts."
+    },
+    "/cloudReels/{reelId}": {
+      "schema": { "$ref": "#/entities/CloudReel" },
+      "description": "Short-form video reels visible across accounts."
+    },
+    "/cloudChats/{chatId}": {
+      "schema": { "$ref": "#/entities/CloudChat" },
+      "description": "1-on-1 Messenger conversation headers and participant profiles."
+    },
+    "/cloudChats/{chatId}/messages/{msgId}": {
+      "schema": { "$ref": "#/entities/CloudChatMessage" },
+      "description": "Messages inside 1-on-1 Messenger threads."
+    },
+    "/cloudChats/{chatId}/typing/{userId}": {
+      "schema": { "$ref": "#/entities/CloudChatTyping" },
+      "description": "Real-time typing indicators per chat participant."
+    },
+    "/cloudGroupChats/{groupId}/messages/{msgId}": {
+      "schema": { "$ref": "#/entities/CloudGroupChatMessage" },
+      "description": "Real-time community group chat messages."
+    },
+    "/cloudCalls/{callId}": {
+      "schema": { "$ref": "#/entities/CloudCall" },
+      "description": "WebRTC voice/video call signaling documents."
+    },
+    "/cloudCalls/{callId}/candidates/{candId}": {
+      "schema": { "$ref": "#/entities/CloudCallCandidate" },
+      "description": "WebRTC ICE candidates for call negotiation."
+    },
+    "/cloudNotes/{noteId}": {
+      "schema": { "$ref": "#/entities/CloudNote" },
+      "description": "Owner-only personal Keep notes."
+    },
+    "/cloudAlbums/{albumId}": {
+      "schema": { "$ref": "#/entities/CloudAlbum" },
+      "description": "User-owned photo albums."
     }
   }
 }

@@ -47,9 +47,21 @@ import {
 import { useApp } from '../context/AppContext';
 import { PostCard } from './PostCard';
 import { CreatePostBox } from './CreatePostBox';
+import { SmartVideo } from './SmartVideo';
 import { sampleUsers, createAvatarUrl } from '../data/mockData';
 import { User as UserType, Post } from '../types';
 import { fileToDataUrl } from '../utils/storage';
+
+const getSafeWebsiteHref = (raw?: string): string | undefined => {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  const lower = trimmed.toLowerCase();
+  if (lower.startsWith('javascript:') || lower.startsWith('vbscript:') || lower.startsWith('data:')) {
+    return undefined;
+  }
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+};
 
 const PRESET_AVATARS = [
   createAvatarUrl('Tanvir Hasan', '#1877F2', '#ffffff'),
@@ -119,6 +131,7 @@ export const ProfileView: React.FC = () => {
 
   // Albums State
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
+  const [confirmDeleteAlbumId, setConfirmDeleteAlbumId] = useState<string | null>(null);
   const [isCreateAlbumModalOpen, setIsCreateAlbumModalOpen] = useState(false);
   const [newAlbumTitle, setNewAlbumTitle] = useState('');
   const [newAlbumTitleBn, setNewAlbumTitleBn] = useState('');
@@ -989,17 +1002,13 @@ export const ProfileView: React.FC = () => {
                     </div>
                   )}
 
-                  {profileUser.website && (
+                  {profileUser.website && getSafeWebsiteHref(profileUser.website) && (
                     <div className="flex items-center gap-2.5 text-xs text-blue-600 dark:text-blue-400">
                       <Globe className="w-4 h-4 shrink-0" />
                       <a
-                        href={
-                          profileUser.website.startsWith('http')
-                            ? profileUser.website
-                            : `https://${profileUser.website}`
-                        }
+                        href={getSafeWebsiteHref(profileUser.website)}
                         target="_blank"
-                        rel="noreferrer"
+                        rel="noopener noreferrer"
                         className="truncate hover:underline"
                       >
                         {profileUser.website}
@@ -1254,8 +1263,12 @@ export const ProfileView: React.FC = () => {
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                             />
                           ) : post.video ? (
-                            <video
+                            <SmartVideo
                               src={post.video}
+                              compact
+                              muted
+                              preload="metadata"
+                              language={language}
                               className="w-full h-full object-cover"
                             />
                           ) : (
@@ -1387,17 +1400,13 @@ export const ProfileView: React.FC = () => {
                   </div>
                 )}
 
-                {profileUser.website && (
+                {profileUser.website && getSafeWebsiteHref(profileUser.website) && (
                   <div>
                     <p className="text-slate-400 font-semibold">{language === 'bn' ? 'ওয়েবসাইট' : 'Website'}</p>
                     <a
-                      href={
-                        profileUser.website.startsWith('http')
-                          ? profileUser.website
-                          : `https://${profileUser.website}`
-                      }
+                      href={getSafeWebsiteHref(profileUser.website)}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       className="text-blue-600 dark:text-blue-400 font-bold mt-0.5 block hover:underline"
                     >
                       {profileUser.website}
@@ -1547,11 +1556,14 @@ export const ProfileView: React.FC = () => {
                   key={vp.id}
                   className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-black flex flex-col"
                 >
-                  <video
-                    src={vp.video}
-                    controls
-                    className="w-full aspect-video object-contain bg-black"
-                  />
+                  <div className="w-full aspect-video bg-black">
+                    <SmartVideo
+                      src={vp.video}
+                      controls
+                      language={language}
+                      className="w-full h-full object-contain bg-black"
+                    />
+                  </div>
                   <div className="p-3 bg-white dark:bg-slate-900">
                     <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 line-clamp-2">
                       {vp.content || (language === 'bn' ? 'ভিডিও পোস্ট' : 'Video Post')}
@@ -1571,16 +1583,20 @@ export const ProfileView: React.FC = () => {
                   className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-black flex flex-col"
                 >
                   {reel.videoUrl ? (
-                    <video
-                      src={reel.videoUrl}
-                      poster={reel.posterUrl}
-                      controls
-                      className="w-full aspect-video object-contain bg-black"
-                    />
+                    <div className="w-full aspect-video bg-black">
+                      <SmartVideo
+                        src={reel.videoUrl}
+                        poster={reel.posterUrl}
+                        controls
+                        language={language}
+                        className="w-full h-full object-contain bg-black"
+                      />
+                    </div>
                   ) : (
                     <img
                       src={reel.posterUrl}
                       alt={reel.description}
+                      referrerPolicy="no-referrer"
                       className="w-full aspect-video object-cover"
                     />
                   )}
@@ -1600,11 +1616,14 @@ export const ProfileView: React.FC = () => {
                   key={st.id}
                   className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-black flex flex-col"
                 >
-                  <video
-                    src={st.videoUrl || st.mediaUrl}
-                    controls
-                    className="w-full aspect-video object-contain bg-black"
-                  />
+                  <div className="w-full aspect-video bg-black">
+                    <SmartVideo
+                      src={st.videoUrl || st.mediaUrl}
+                      controls
+                      language={language}
+                      className="w-full h-full object-contain bg-black"
+                    />
+                  </div>
                   <div className="p-3 bg-white dark:bg-slate-900">
                     <span className="inline-block px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[10px] font-bold mb-1">
                       ⏳ 24h Story Video
@@ -1762,18 +1781,36 @@ export const ProfileView: React.FC = () => {
                           <span>{language === 'bn' ? 'ছবি যোগ করুন' : 'Add Photos'}</span>
                         </button>
                         {!currentAlbum.isSystem && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (window.confirm(language === 'bn' ? 'আপনি কি নিশ্চিত এই অ্যালবামটি মুছে ফেলতে চান?' : 'Are you sure you want to delete this album?')) {
-                                deleteAlbum(currentAlbum.id);
-                                setSelectedAlbumId(null);
-                              }
-                            }}
-                            className="px-3 py-2 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl cursor-pointer transition-colors"
-                          >
-                            {language === 'bn' ? 'অ্যালবাম মুছুন' : 'Delete Album'}
-                          </button>
+                          confirmDeleteAlbumId === currentAlbum.id ? (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  deleteAlbum(currentAlbum.id);
+                                  setConfirmDeleteAlbumId(null);
+                                  setSelectedAlbumId(null);
+                                }}
+                                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors"
+                              >
+                                {language === 'bn' ? 'হ্যাঁ, মুছুন' : 'Confirm'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteAlbumId(null)}
+                                className="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl cursor-pointer transition-colors"
+                              >
+                                {language === 'bn' ? 'বাতিল' : 'Cancel'}
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteAlbumId(currentAlbum.id)}
+                              className="px-3 py-2 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl cursor-pointer transition-colors"
+                            >
+                              {language === 'bn' ? 'অ্যালবাম মুছুন' : 'Delete Album'}
+                            </button>
+                          )
                         )}
                       </div>
                     )}

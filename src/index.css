@@ -7,6 +7,8 @@
     color-scheme: light;
     overflow-x: clip;
     max-width: 100%;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
   html.dark {
     color-scheme: dark;
@@ -19,10 +21,28 @@
     color: #0f172a;
     overflow-x: clip;
     max-width: 100%;
+    overscroll-behavior-y: contain;
   }
   html.dark body {
     background-color: #020617;
     color: #f8fafc;
+  }
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Mobile WebView / APK / Standalone compact scaling (keeps desktop >=768px unchanged) */
+@media (max-width: 767px) {
+  html.app-compact {
+    font-size: 13.5px;
+  }
+}
+
+@media (display-mode: standalone) and (max-width: 767px) {
+  html:not(.app-normal) {
+    font-size: 13.5px;
   }
 }
 

@@ -24,113 +24,325 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isVerifiedUser() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+    function safeUid() {
+      return request.auth.uid;
+    }
+
+    function isOptionalString(data, key, maxLen) {
+      return !(key in data) || data[key] == null || (data[key] is string && data[key].size() <= maxLen);
+    }
+
+    function isOptionalBool(data, key) {
+      return !(key in data) || (data[key] is bool);
+    }
+
+    function isOptionalNumber(data, key) {
+      return !(key in data) || (data[key] is number);
+    }
+
+    function isOptionalMap(data, key) {
+      return !(key in data) || data[key] == null || (data[key] is map);
+    }
+
+    function isOptionalBoundedList(data, key, maxLen) {
+      return !(key in data) || (data[key] is list && data[key].size() <= maxLen);
     }
 
     // --- Entity Validation Blueprints (Anti-Update-Gap) ---
     function isValidUserPublicProfile(data) {
-      return data.keys().hasAll(['uid', 'name', 'username', 'avatar', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['uid', 'name', 'nameBn', 'username', 'avatar', 'bio', 'city', 'createdAt', 'updatedAt'])
-        && data.uid == request.auth.uid
-        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$')
+      return data.keys().hasAll(['uid', 'name', 'username', 'avatar', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'name', 'nameBn', 'username', 'avatar', 'bio', 'city', 'isOnline', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.uid == safeUid()
         && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
         && (!('nameBn' in data) || (data.nameBn is string && data.nameBn.size() >= 1 && data.nameBn.size() <= 120))
         && data.username is string && data.username.size() >= 1 && data.username.size() <= 80
-        && data.avatar is string && data.avatar.size() >= 1 && data.avatar.size() <= 2048
-        && (!('bio' in data) || (data.bio is string && data.bio.size() <= 500))
-        && (!('city' in data) || (data.city is string && data.city.size() <= 120))
-        && data.createdAt is timestamp
+        && data.avatar is string && data.avatar.size() >= 1 && data.avatar.size() <= 700000
+        && isOptionalString(data, 'bio', 500)
+        && isOptionalString(data, 'city', 120)
+        && isOptionalBool(data, 'isOnline')
+        && (!('createdAt' in data) || data.createdAt is timestamp)
         && data.updatedAt is timestamp;
     }
 
     function isValidUserPrivateInfo(data) {
       return data.keys().hasAll(['uid', 'email', 'updatedAt'])
         && data.keys().hasOnly(['uid', 'email', 'updatedAt'])
-        && data.uid == request.auth.uid
-        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$')
+        && isValidId(data.uid)
+        && data.uid == safeUid()
         && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
         && data.updatedAt is timestamp;
     }
 
     function isValidCloudPost(data) {
-      return data.keys().hasAll(['authorId', 'authorName', 'authorAvatar', 'content', 'privacy', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['authorId', 'authorName', 'authorAvatar', 'content', 'privacy', 'driveFileId', 'driveFileName', 'driveWebViewLink', 'createdAt', 'updatedAt'])
-        && data.authorId == request.auth.uid
-        && data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 && data.authorId.matches('^[a-zA-Z0-9_\\-]+$')
+      return data.keys().hasAll(['authorId', 'authorName', 'authorAvatar', 'content', 'privacy', 'updatedAt'])
+        && data.keys().hasOnly([
+          'authorId', 'authorName', 'authorAvatar', 'content', 'privacy',
+          'mediaUrl', 'mediaType', 'gradientBg', 'location', 'feeling', 'isLive',
+          'poll', 'scheduledFor', 'expiresAt', 'musicTitle', 'audioUrl',
+          'reactions', 'userReactions', 'reactionsCount', 'comments', 'commentsCount', 'sharesCount',
+          'driveFileId', 'driveFileName', 'driveWebViewLink',
+          'timestampMs', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.authorId)
         && data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 120
-        && data.authorAvatar is string && data.authorAvatar.size() >= 1 && data.authorAvatar.size() <= 2048
+        && data.authorAvatar is string && data.authorAvatar.size() >= 1 && data.authorAvatar.size() <= 700000
         && data.content is string && data.content.size() >= 1 && data.content.size() <= 5000
-        && data.privacy is string && data.privacy.size() <= 20 && (data.privacy == 'public' || data.privacy == 'friends' || data.privacy == 'only_me')
-        && (!('driveFileId' in data) || (data.driveFileId is string && data.driveFileId.size() <= 128))
-        && (!('driveFileName' in data) || (data.driveFileName is string && data.driveFileName.size() <= 256))
-        && (!('driveWebViewLink' in data) || (data.driveWebViewLink is string && data.driveWebViewLink.size() <= 2048))
-        && data.createdAt is timestamp
+        && data.privacy is string && data.privacy.size() <= 20 && (data.privacy in ['public', 'friends', 'only_me'])
+        && isOptionalString(data, 'mediaUrl', 700000)
+        && isOptionalString(data, 'mediaType', 20)
+        && isOptionalString(data, 'gradientBg', 160)
+        && isOptionalString(data, 'location', 160)
+        && isOptionalMap(data, 'feeling')
+        && isOptionalBool(data, 'isLive')
+        && isOptionalMap(data, 'poll')
+        && isOptionalString(data, 'scheduledFor', 64)
+        && isOptionalString(data, 'expiresAt', 64)
+        && isOptionalString(data, 'musicTitle', 120)
+        && isOptionalString(data, 'audioUrl', 700000)
+        && isOptionalMap(data, 'reactions')
+        && isOptionalMap(data, 'userReactions')
+        && isOptionalNumber(data, 'reactionsCount')
+        && isOptionalBoundedList(data, 'comments', 300)
+        && isOptionalNumber(data, 'commentsCount')
+        && isOptionalNumber(data, 'sharesCount')
+        && isOptionalString(data, 'driveFileId', 128)
+        && isOptionalString(data, 'driveFileName', 256)
+        && isOptionalString(data, 'driveWebViewLink', 2048)
+        && isOptionalNumber(data, 'timestampMs')
+        && (!('createdAt' in data) || data.createdAt is timestamp)
         && data.updatedAt is timestamp;
+    }
+
+    function isValidCloudStory(data) {
+      return data.keys().hasAll(['id', 'authorId', 'authorName', 'expiresAt'])
+        && data.keys().hasOnly([
+          'id', 'authorId', 'authorName', 'authorAvatar',
+          'mediaUrl', 'videoUrl', 'mediaType', 'text', 'gradientBg',
+          'audioUrl', 'audioTitle', 'audioArtist',
+          'reactions', 'userReactions', 'reactionUsers',
+          'timestampMs', 'createdAt', 'expiresAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.authorId)
+        && data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 120
+        && isOptionalString(data, 'authorAvatar', 700000)
+        && isOptionalString(data, 'mediaUrl', 700000)
+        && isOptionalString(data, 'videoUrl', 700000)
+        && isOptionalString(data, 'mediaType', 20)
+        && isOptionalString(data, 'text', 1000)
+        && isOptionalString(data, 'gradientBg', 160)
+        && isOptionalString(data, 'audioUrl', 700000)
+        && isOptionalString(data, 'audioTitle', 160)
+        && isOptionalString(data, 'audioArtist', 120)
+        && isOptionalMap(data, 'reactions')
+        && isOptionalMap(data, 'userReactions')
+        && isOptionalBoundedList(data, 'reactionUsers', 60)
+        && isOptionalNumber(data, 'timestampMs')
+        && (!('createdAt' in data) || data.createdAt is timestamp)
+        && data.expiresAt is number;
+    }
+
+    function isValidCloudReel(data) {
+      return data.keys().hasAll(['id', 'authorId', 'authorName', 'videoUrl'])
+        && data.keys().hasOnly([
+          'id', 'authorId', 'authorName', 'authorAvatar',
+          'videoUrl', 'posterUrl', 'caption', 'soundTitle',
+          'likesCount', 'likedUserIds', 'viewsCount', 'sharesCount',
+          'commentsCount', 'comments', 'reactions', 'userReactions',
+          'timestampMs', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.authorId)
+        && data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 120
+        && isOptionalString(data, 'authorAvatar', 700000)
+        && data.videoUrl is string && data.videoUrl.size() >= 1 && data.videoUrl.size() <= 700000
+        && isOptionalString(data, 'posterUrl', 700000)
+        && isOptionalString(data, 'caption', 1000)
+        && isOptionalString(data, 'soundTitle', 120)
+        && isOptionalNumber(data, 'likesCount')
+        && isOptionalBoundedList(data, 'likedUserIds', 500)
+        && isOptionalNumber(data, 'viewsCount')
+        && isOptionalNumber(data, 'sharesCount')
+        && isOptionalNumber(data, 'commentsCount')
+        && isOptionalBoundedList(data, 'comments', 200)
+        && isOptionalMap(data, 'reactions')
+        && isOptionalMap(data, 'userReactions')
+        && isOptionalNumber(data, 'timestampMs')
+        && (!('createdAt' in data) || data.createdAt is timestamp)
+        && (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function isValidCloudChat(data) {
+      return data.keys().hasAll(['chatId', 'participants'])
+        && data.keys().hasOnly([
+          'chatId', 'participants', 'participantProfiles',
+          'lastMessageText', 'lastSenderId', 'lastSenderName', 'lastTimestamp', 'updatedAt'
+        ])
+        && isValidId(data.chatId)
+        && data.participants is list && data.participants.size() >= 1 && data.participants.size() <= 10
+        && isOptionalMap(data, 'participantProfiles')
+        && isOptionalString(data, 'lastMessageText', 200)
+        && isOptionalString(data, 'lastSenderId', 128)
+        && isOptionalString(data, 'lastSenderName', 120)
+        && isOptionalNumber(data, 'lastTimestamp')
+        && (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function isValidCloudChatMessage(data) {
+      return data.keys().hasAll(['id', 'senderId', 'recipientId', 'timestamp'])
+        && data.keys().hasOnly([
+          'id', 'senderId', 'senderName', 'senderAvatar', 'recipientId',
+          'text', 'audioUrl', 'audioDuration', 'imageUrl', 'mediaUrl', 'mediaType',
+          'replyToId', 'replyTo', 'timestamp', 'isRead', 'seenAt', 'seenBy', 'createdAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.senderId)
+        && isValidId(data.recipientId)
+        && isOptionalString(data, 'senderName', 120)
+        && isOptionalString(data, 'senderAvatar', 700000)
+        && isOptionalString(data, 'text', 4000)
+        && isOptionalString(data, 'audioUrl', 700000)
+        && isOptionalNumber(data, 'audioDuration')
+        && isOptionalString(data, 'imageUrl', 700000)
+        && isOptionalString(data, 'mediaUrl', 700000)
+        && (!('mediaType' in data) || (data.mediaType is string && data.mediaType in ['image', 'video']))
+        && isOptionalString(data, 'replyToId', 128)
+        && isOptionalMap(data, 'replyTo')
+        && data.timestamp is number
+        && isOptionalBool(data, 'isRead')
+        && isOptionalNumber(data, 'seenAt')
+        && isOptionalString(data, 'seenBy', 128)
+        && (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidCloudChatTyping(data) {
+      return data.keys().hasAll(['userId', 'isTyping', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'userName', 'isTyping', 'updatedAt'])
+        && isValidId(data.userId)
+        && data.userId == safeUid()
+        && isOptionalString(data, 'userName', 120)
+        && data.isTyping is bool
+        && data.updatedAt is number;
+    }
+
+    function isValidCloudGroupMessage(data) {
+      return data.keys().hasAll(['id', 'groupId', 'senderId', 'text', 'timestamp'])
+        && data.keys().hasOnly(['id', 'groupId', 'senderId', 'senderName', 'senderAvatar', 'text', 'timestamp', 'createdAt'])
+        && isValidId(data.id)
+        && isValidId(data.groupId)
+        && isValidId(data.senderId)
+        && isOptionalString(data, 'senderName', 120)
+        && isOptionalString(data, 'senderAvatar', 700000)
+        && data.text is string && data.text.size() >= 1 && data.text.size() <= 4000
+        && data.timestamp is number
+        && (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidCloudCall(data) {
+      return data.keys().hasAll(['callId', 'caller', 'callee', 'status', 'createdAt'])
+        && data.keys().hasOnly(['callId', 'caller', 'callee', 'offer', 'answer', 'status', 'createdAt', 'answeredAt'])
+        && isValidId(data.callId)
+        && data.caller is string && data.caller.size() >= 1 && data.caller.size() <= 128
+        && data.callee is string && data.callee.size() >= 1 && data.callee.size() <= 128
+        && isOptionalMap(data, 'offer')
+        && isOptionalMap(data, 'answer')
+        && data.status is string && data.status in ['calling', 'connected', 'ended']
+        && data.createdAt is number
+        && isOptionalNumber(data, 'answeredAt');
+    }
+
+    function isValidCloudCallCandidate(data) {
+      return data.keys().hasAll(['candidate', 'role', 'timestamp'])
+        && data.keys().hasOnly(['candidate', 'role', 'timestamp'])
+        && data.candidate is map
+        && data.role is string && data.role in ['caller', 'callee']
+        && data.timestamp is number;
+    }
+
+    function isValidCloudNote(data) {
+      return data.keys().hasAll(['id', 'userId', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'title', 'content', 'color', 'isPinned', 'tags', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && data.userId == safeUid()
+        && isOptionalString(data, 'title', 240)
+        && isOptionalString(data, 'content', 10000)
+        && isOptionalString(data, 'color', 32)
+        && isOptionalBool(data, 'isPinned')
+        && isOptionalBoundedList(data, 'tags', 20)
+        && data.updatedAt is number;
+    }
+
+    function isValidCloudAlbum(data) {
+      return data.keys().hasAll(['id', 'userId', 'name'])
+        && data.keys().hasOnly(['id', 'userId', 'name', 'photos', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && data.userId == safeUid()
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && isOptionalBoundedList(data, 'photos', 200)
+        && isOptionalNumber(data, 'updatedAt');
     }
 
     // --- Collection: /users/{userId} (Public Profile without PII) ---
     match /users/{userId} {
       allow get: if isSignedIn() && isValidId(userId);
-      allow list: if isSignedIn() && existing().uid == request.auth.uid;
+      allow list: if isSignedIn() && existing().uid is string;
 
-      allow create: if isVerifiedUser()
+      allow create: if isSignedIn()
         && isValidId(userId)
-        && userId == request.auth.uid
+        && userId == safeUid()
         && isValidUserPublicProfile(incoming())
-        && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
 
-      allow update: if isVerifiedUser()
+      allow update: if isSignedIn()
         && isValidId(userId)
         && isValidUserPublicProfile(incoming())
-        && userId == request.auth.uid
-        && existing().uid == request.auth.uid
+        && userId == safeUid()
+        && existing().uid == safeUid()
         && incoming().uid == existing().uid
-        && incoming().createdAt == existing().createdAt
+        && (!('createdAt' in existing()) || incoming().createdAt == existing().createdAt)
         && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'nameBn', 'username', 'avatar', 'bio', 'city', 'updatedAt']);
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'nameBn', 'username', 'avatar', 'bio', 'city', 'isOnline', 'createdAt', 'updatedAt']);
 
-      allow delete: if isVerifiedUser()
+      allow delete: if isSignedIn()
         && isValidId(userId)
-        && userId == request.auth.uid
-        && existing().uid == request.auth.uid;
+        && userId == safeUid()
+        && existing().uid == safeUid();
 
       // --- Subcollection: /users/{userId}/private/{docId} (Strictly Isolated PII) ---
       match /private/{docId} {
-        allow get: if isVerifiedUser()
+        allow get: if isSignedIn()
           && isValidId(userId)
           && isValidId(docId)
-          && userId == request.auth.uid
-          && docId == 'info'
-          && exists(/databases/$(database)/documents/users/$(userId));
+          && userId == safeUid()
+          && docId == 'info';
 
-        allow create: if isVerifiedUser()
+        allow create: if isSignedIn()
           && isValidId(userId)
           && isValidId(docId)
-          && userId == request.auth.uid
+          && userId == safeUid()
           && docId == 'info'
           && isValidUserPrivateInfo(incoming())
-          && incoming().updatedAt == request.time
-          && exists(/databases/$(database)/documents/users/$(userId));
+          && incoming().updatedAt == request.time;
 
-        allow update: if isVerifiedUser()
+        allow update: if isSignedIn()
           && isValidId(userId)
           && isValidId(docId)
           && isValidUserPrivateInfo(incoming())
-          && userId == request.auth.uid
+          && userId == safeUid()
           && docId == 'info'
-          && existing().uid == request.auth.uid
+          && existing().uid == safeUid()
           && incoming().uid == existing().uid
           && incoming().updatedAt == request.time
-          && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'updatedAt'])
-          && exists(/databases/$(database)/documents/users/$(userId));
+          && incoming().diff(existing()).affectedKeys().hasOnly(['uid', 'email', 'updatedAt']);
 
-        allow delete: if isVerifiedUser()
+        allow delete: if isSignedIn()
           && isValidId(userId)
           && isValidId(docId)
-          && userId == request.auth.uid
-          && existing().uid == request.auth.uid;
+          && userId == safeUid()
+          && existing().uid == safeUid();
       }
     }
 
@@ -138,35 +350,291 @@ service cloud.firestore {
     match /cloudPosts/{postId} {
       allow get: if isSignedIn()
         && isValidId(postId)
-        && (existing().privacy == 'public' || existing().authorId == request.auth.uid);
+        && (existing().privacy in ['public', 'friends'] || existing().authorId == safeUid());
 
       allow list: if isSignedIn()
-        && (existing().privacy == 'public' || existing().authorId == request.auth.uid);
+        && (existing().privacy in ['public', 'friends'] || existing().authorId == safeUid());
 
-      allow create: if isVerifiedUser()
+      allow create: if isSignedIn()
         && isValidId(postId)
         && isValidCloudPost(incoming())
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+        && incoming().authorId == safeUid()
+        && incoming().updatedAt == request.time;
 
-      allow update: if isVerifiedUser()
+      allow update: if isSignedIn()
         && isValidId(postId)
         && isValidCloudPost(incoming())
-        && existing().authorId == request.auth.uid
         && incoming().authorId == existing().authorId
-        && incoming().createdAt == existing().createdAt
+        && (!('createdAt' in existing()) || incoming().createdAt == existing().createdAt)
         && incoming().updatedAt == request.time
         && (
-          // Action 1: Update post content or Drive link
-          incoming().diff(existing()).affectedKeys().hasOnly(['content', 'driveFileId', 'driveFileName', 'driveWebViewLink', 'updatedAt']) ||
-          // Action 2: Update post privacy
-          incoming().diff(existing()).affectedKeys().hasOnly(['privacy', 'updatedAt'])
+          // Tier 1: Post author edits content, media, privacy, or engagement
+          existing().authorId == safeUid()
+          ||
+          // Tier 2: Any signed-in member engages with shared post
+          (
+            existing().privacy in ['public', 'friends']
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'reactions', 'reactionsCount', 'comments', 'commentsCount',
+              'sharesCount', 'userReactions', 'poll', 'updatedAt'
+            ])
+          )
         );
 
-      allow delete: if isVerifiedUser()
+      allow delete: if isSignedIn()
         && isValidId(postId)
-        && existing().authorId == request.auth.uid;
+        && existing().authorId == safeUid();
+    }
+
+    // --- Collection: /cloudStories/{storyId} (24-Hour Stories) ---
+    match /cloudStories/{storyId} {
+      allow get: if isSignedIn() && isValidId(storyId);
+      allow list: if isSignedIn() && existing().authorId is string;
+
+      allow create: if isSignedIn()
+        && isValidId(storyId)
+        && isValidCloudStory(incoming())
+        && incoming().authorId == safeUid();
+
+      allow update: if isSignedIn()
+        && isValidId(storyId)
+        && isValidCloudStory(incoming())
+        && incoming().authorId == existing().authorId
+        && (
+          existing().authorId == safeUid()
+          || incoming().diff(existing()).affectedKeys().hasOnly(['reactions', 'reactionUsers', 'userReactions'])
+        );
+
+      allow delete: if isSignedIn()
+        && isValidId(storyId)
+        && existing().authorId == safeUid();
+    }
+
+    // --- Collection: /cloudReels/{reelId} (Video Reels) ---
+    match /cloudReels/{reelId} {
+      allow get: if isSignedIn() && isValidId(reelId);
+      allow list: if isSignedIn() && existing().authorId is string;
+
+      allow create: if isSignedIn()
+        && isValidId(reelId)
+        && isValidCloudReel(incoming())
+        && incoming().authorId == safeUid();
+
+      allow update: if isSignedIn()
+        && isValidId(reelId)
+        && isValidCloudReel(incoming())
+        && incoming().authorId == existing().authorId
+        && (
+          existing().authorId == safeUid()
+          || incoming().diff(existing()).affectedKeys().hasOnly([
+            'likesCount', 'likedUserIds', 'viewsCount', 'sharesCount',
+            'commentsCount', 'comments', 'reactions', 'userReactions'
+          ])
+        );
+
+      allow delete: if isSignedIn()
+        && isValidId(reelId)
+        && existing().authorId == safeUid();
+    }
+
+    // --- Collection: /cloudChats/{chatId} ---
+    match /cloudChats/{chatId} {
+      allow get: if isSignedIn()
+        && isValidId(chatId)
+        && (resource == null || safeUid() in existing().participants || chatId.matches('^.*' + safeUid() + '.*$'));
+
+      allow list: if isSignedIn()
+        && safeUid() in existing().participants;
+
+      allow create: if isSignedIn()
+        && isValidId(chatId)
+        && isValidCloudChat(incoming())
+        && safeUid() in incoming().participants;
+
+      allow update: if isSignedIn()
+        && isValidId(chatId)
+        && isValidCloudChat(incoming())
+        && (safeUid() in existing().participants || chatId.matches('^.*' + safeUid() + '.*$'))
+        && safeUid() in incoming().participants
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'chatId', 'participants', 'participantProfiles',
+          'lastMessageText', 'lastSenderId', 'lastSenderName', 'lastTimestamp', 'updatedAt'
+        ]);
+
+      allow delete: if isSignedIn()
+        && isValidId(chatId)
+        && safeUid() in existing().participants;
+
+      // Subcollection: Messages in 1-on-1 chat
+      match /messages/{msgId} {
+        allow get: if isSignedIn()
+          && isValidId(chatId)
+          && isValidId(msgId)
+          && (existing().senderId == safeUid() || existing().recipientId == safeUid() || chatId.matches('^.*' + safeUid() + '.*$'));
+
+        allow list: if isSignedIn()
+          && (existing().senderId == safeUid() || existing().recipientId == safeUid() || chatId.matches('^.*' + safeUid() + '.*$'));
+
+        allow create: if isSignedIn()
+          && isValidId(chatId)
+          && isValidId(msgId)
+          && isValidCloudChatMessage(incoming())
+          && incoming().senderId == safeUid();
+
+        allow update: if isSignedIn()
+          && isValidId(chatId)
+          && isValidId(msgId)
+          && isValidCloudChatMessage(incoming())
+          && incoming().senderId == existing().senderId
+          && incoming().recipientId == existing().recipientId
+          && (
+            (existing().senderId == safeUid() && incoming().diff(existing()).affectedKeys().hasOnly(['text', 'isRead', 'seenAt', 'seenBy']))
+            || (existing().recipientId == safeUid() && incoming().diff(existing()).affectedKeys().hasOnly(['isRead', 'seenAt', 'seenBy']))
+          );
+
+        allow delete: if isSignedIn()
+          && isValidId(chatId)
+          && isValidId(msgId)
+          && existing().senderId == safeUid();
+      }
+
+      // Subcollection: Typing indicators in chat
+      match /typing/{userId} {
+        allow get: if isSignedIn()
+          && isValidId(chatId)
+          && isValidId(userId)
+          && (userId == safeUid() || chatId.matches('^.*' + safeUid() + '.*$'));
+
+        allow list: if isSignedIn()
+          && (existing().userId == safeUid() || chatId.matches('^.*' + safeUid() + '.*$'));
+
+        allow create: if isSignedIn()
+          && isValidId(chatId)
+          && isValidId(userId)
+          && userId == safeUid()
+          && isValidCloudChatTyping(incoming());
+
+        allow update: if isSignedIn()
+          && isValidId(chatId)
+          && isValidId(userId)
+          && userId == safeUid()
+          && isValidCloudChatTyping(incoming())
+          && incoming().userId == existing().userId
+          && incoming().diff(existing()).affectedKeys().hasOnly(['userId', 'userName', 'isTyping', 'updatedAt']);
+
+        allow delete: if isSignedIn()
+          && isValidId(chatId)
+          && isValidId(userId)
+          && userId == safeUid();
+      }
+    }
+
+    // --- Collection: /cloudGroupChats/{groupId}/messages/{msgId} ---
+    match /cloudGroupChats/{groupId}/messages/{msgId} {
+      allow get: if isSignedIn() && isValidId(groupId) && isValidId(msgId);
+      allow list: if isSignedIn() && existing().senderId is string;
+
+      allow create: if isSignedIn()
+        && isValidId(groupId)
+        && isValidId(msgId)
+        && isValidCloudGroupMessage(incoming())
+        && incoming().senderId == safeUid();
+
+      allow update: if isSignedIn()
+        && isValidId(groupId)
+        && isValidId(msgId)
+        && isValidCloudGroupMessage(incoming())
+        && existing().senderId == safeUid()
+        && incoming().senderId == existing().senderId
+        && incoming().diff(existing()).affectedKeys().hasOnly(['text']);
+
+      allow delete: if isSignedIn()
+        && isValidId(groupId)
+        && isValidId(msgId)
+        && existing().senderId == safeUid();
+    }
+
+    // --- Collection: /cloudCalls/{callId} (WebRTC Signaling) ---
+    match /cloudCalls/{callId} {
+      allow get: if isSignedIn() && isValidId(callId);
+      allow list: if isSignedIn() && (existing().caller == safeUid() || existing().callee == safeUid());
+
+      allow create: if isSignedIn()
+        && isValidId(callId)
+        && isValidCloudCall(incoming())
+        && incoming().caller == safeUid();
+
+      allow update: if isSignedIn()
+        && isValidId(callId)
+        && isValidCloudCall(incoming())
+        && incoming().callId == existing().callId
+        && incoming().caller == existing().caller
+        && (
+          existing().caller == safeUid()
+          || existing().callee == safeUid()
+          || existing().callee == 'peer'
+        )
+        && incoming().diff(existing()).affectedKeys().hasOnly(['answer', 'status', 'answeredAt']);
+
+      allow delete: if isSignedIn()
+        && isValidId(callId)
+        && existing().caller == safeUid();
+
+      match /candidates/{candId} {
+        allow get: if isSignedIn() && isValidId(callId) && isValidId(candId);
+        allow list: if isSignedIn() && existing().role is string;
+
+        allow create: if isSignedIn()
+          && isValidId(callId)
+          && isValidId(candId)
+          && isValidCloudCallCandidate(incoming());
+
+        allow update, delete: if false;
+      }
+    }
+
+    // --- Collection: /cloudNotes/{noteId} (Personal Notes) ---
+    match /cloudNotes/{noteId} {
+      allow get: if isSignedIn() && isValidId(noteId) && (resource == null || existing().userId == safeUid());
+      allow list: if isSignedIn() && existing().userId == safeUid();
+
+      allow create: if isSignedIn()
+        && isValidId(noteId)
+        && isValidCloudNote(incoming())
+        && incoming().userId == safeUid();
+
+      allow update: if isSignedIn()
+        && isValidId(noteId)
+        && isValidCloudNote(incoming())
+        && existing().userId == safeUid()
+        && incoming().userId == existing().userId
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'color', 'isPinned', 'tags', 'updatedAt']);
+
+      allow delete: if isSignedIn()
+        && isValidId(noteId)
+        && existing().userId == safeUid();
+    }
+
+    // --- Collection: /cloudAlbums/{albumId} (Photo Albums) ---
+    match /cloudAlbums/{albumId} {
+      allow get: if isSignedIn() && isValidId(albumId);
+      allow list: if isSignedIn() && existing().userId is string;
+
+      allow create: if isSignedIn()
+        && isValidId(albumId)
+        && isValidCloudAlbum(incoming())
+        && incoming().userId == safeUid();
+
+      allow update: if isSignedIn()
+        && isValidId(albumId)
+        && isValidCloudAlbum(incoming())
+        && existing().userId == safeUid()
+        && incoming().userId == existing().userId
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'photos', 'updatedAt']);
+
+      allow delete: if isSignedIn()
+        && isValidId(albumId)
+        && existing().userId == safeUid();
     }
   }
 }

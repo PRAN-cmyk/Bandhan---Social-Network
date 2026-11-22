@@ -78,8 +78,18 @@ export const ShareModal: React.FC<ShareModalProps> = ({ post, isOpen, onClose })
   };
 
   const openExternal = (platformUrl: string) => {
-    window.open(platformUrl, '_blank', 'noopener,noreferrer');
-    showToast(language === 'bn' ? 'শেয়ারিং পেজ খোলা হয়েছে' : 'Opened share dialog');
+    try {
+      const a = document.createElement('a');
+      a.href = platformUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showToast(language === 'bn' ? 'শেয়ারিং পেজ খোলা হয়েছে' : 'Opened share link');
+    } catch {
+      handleCopyLink();
+    }
   };
 
   const socialPlatforms = [

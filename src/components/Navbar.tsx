@@ -25,6 +25,7 @@ import { useApp } from '../context/AppContext';
 import { createAvatarUrl } from '../data/mockData';
 import { NotificationCenter } from './NotificationCenter';
 import { CloudinarySettingsModal } from './CloudinarySettingsModal';
+import { SmartImage } from './SmartImage';
 
 export const Navbar: React.FC = () => {
   const {
@@ -110,6 +111,7 @@ export const Navbar: React.FC = () => {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isMessengerOpen, setIsMessengerOpen] = useState(false);
   const [messengerTab, setMessengerTab] = useState<'direct' | 'groups'>('direct');
+  const [messengerFilter, setMessengerFilter] = useState<'all' | 'unread'>('all');
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   const searchRef = useRef<HTMLDivElement>(null);
@@ -150,15 +152,20 @@ export const Navbar: React.FC = () => {
         .filter((u) => u && u.id && u.id !== currentUser?.id && !blockedUserIds.includes(u.id))
         .map((u) => [u.id, u]),
     ).values(),
-  ).filter((u) => {
-    const q = messengerSearch.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      u.name.toLowerCase().includes(q) ||
-      (u.nameBn && u.nameBn.toLowerCase().includes(q)) ||
-      (u.username && u.username.toLowerCase().includes(q))
-    );
-  });
+  )
+    .filter((u) => {
+      if (messengerFilter === 'unread' && (conversations[u.id]?.unreadCount || 0) === 0) {
+        return false;
+      }
+      const q = messengerSearch.trim().toLowerCase();
+      if (!q) return true;
+      return (
+        u.name.toLowerCase().includes(q) ||
+        (u.nameBn && u.nameBn.toLowerCase().includes(q)) ||
+        (u.username && u.username.toLowerCase().includes(q))
+      );
+    })
+    .sort((a, b) => (conversations[b.id]?.unreadCount || 0) - (conversations[a.id]?.unreadCount || 0));
 
   // Filtered search results
   const searchResults = searchInput.trim()
@@ -175,7 +182,7 @@ export const Navbar: React.FC = () => {
     : null;
 
   return (
-    <header className="sticky top-0 z-40 h-14 w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 transition-colors">
+    <header className="sticky top-0 z-40 h-12 md:h-14 w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 transition-colors">
       <div className="h-full px-2 sm:px-4 flex items-center justify-between gap-1.5 sm:gap-2 max-w-[1920px] mx-auto">
         {/* Zone 1: Brand & Search */}
         <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 flex-1 md:flex-none" ref={searchRef}>
@@ -226,7 +233,7 @@ export const Navbar: React.FC = () => {
 
             {/* Dropdown Container: Search History or Live Search Results */}
             {isSearchOpen && (
-              <div className="fixed sm:absolute top-14 sm:top-12 left-2 right-2 sm:left-0 sm:right-auto sm:w-96 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-3 max-h-96 overflow-y-auto z-50 animate-in fade-in zoom-in-95 duration-150">
+              <div className="fixed sm:absolute top-12 sm:top-12 left-2 right-2 sm:left-0 sm:right-auto sm:w-96 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-3 max-h-96 overflow-y-auto z-50 animate-in fade-in zoom-in-95 duration-150">
                 {!searchInput.trim() ? (
                   /* ========================================================= */
                   /* RECENT SEARCH HISTORY (LOCAL STORAGE SYSTEM)              */
@@ -351,10 +358,11 @@ export const Navbar: React.FC = () => {
                                 }}
                                 className="w-full flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-left cursor-pointer transition-colors"
                               >
-                                <img
+                                <SmartImage
                                   src={person.avatar}
                                   alt={person.name}
-                                  referrerPolicy="no-referrer"
+                                  fallbackType="avatar"
+                                  fallbackLabel={person.name}
                                   className="w-8 h-8 rounded-full object-cover"
                                 />
                                 <div className="truncate">
@@ -628,7 +636,7 @@ export const Navbar: React.FC = () => {
 
             {/* Messenger Quick Dropdown - Responsive size + Direct & Group Chats + Online Toggle */}
             {isMessengerOpen && (
-              <div className="fixed sm:absolute right-2 sm:right-0 top-14 sm:top-11 w-[calc(100vw-1rem)] max-w-[350px] sm:w-84 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-3 z-50">
+              <div className="fixed sm:absolute right-2 sm:right-0 top-12 sm:top-11 w-[calc(100vw-1rem)] max-w-[350px] sm:w-84 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-3 z-50">
                 <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 dark:border-slate-800">
                   <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
                     {t.messenger}
@@ -686,28 +694,59 @@ export const Navbar: React.FC = () => {
                 </div>
 
                 {messengerTab === 'direct' && (
-                  <div className="relative mb-2">
-                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                    <input
-                      type="text"
-                      value={messengerSearch}
-                      onChange={(e) => setMessengerSearch(e.target.value)}
-                      placeholder={
-                        language === 'bn'
-                          ? 'মেসেজ করতে বন্ধুর নাম খুঁজুন...'
-                          : 'Search someone to message...'
-                      }
-                      className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder:text-slate-400"
-                    />
-                    {messengerSearch && (
+                  <div className="space-y-2 mb-2">
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={messengerSearch}
+                        onChange={(e) => setMessengerSearch(e.target.value)}
+                        placeholder={
+                          language === 'bn'
+                            ? 'মেসেজ করতে বন্ধুর নাম খুঁজুন...'
+                            : 'Search someone to message...'
+                        }
+                        className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder:text-slate-400"
+                      />
+                      {messengerSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setMessengerSearch('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={() => setMessengerSearch('')}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        onClick={() => setMessengerFilter('all')}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${
+                          messengerFilter === 'all'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                        }`}
                       >
-                        <X className="w-3 h-3" />
+                        {language === 'bn' ? 'সব চ্যাট' : 'All'}
                       </button>
-                    )}
+                      <button
+                        type="button"
+                        onClick={() => setMessengerFilter('unread')}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-colors flex items-center gap-1 ${
+                          messengerFilter === 'unread'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                        }`}
+                      >
+                        <span>{language === 'bn' ? 'অপঠিত' : 'Unread'}</span>
+                        {unreadMessages > 0 && (
+                          <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[9px] font-black">
+                            {unreadMessages}
+                          </span>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -717,6 +756,7 @@ export const Navbar: React.FC = () => {
                       messengerContacts.map((contact) => {
                         const conv = conversations[contact.id];
                         const lastMsg = conv?.messages[conv.messages.length - 1];
+                        const unreadCount = conv?.unreadCount || 0;
                         const isOnline = contact.isOnline !== false;
                         return (
                           <button
@@ -726,13 +766,16 @@ export const Navbar: React.FC = () => {
                               setIsMessengerOpen(false);
                               setMessengerSearch('');
                             }}
-                            className="w-full flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-left transition-colors cursor-pointer"
+                            className={`w-full flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-left transition-colors cursor-pointer ${
+                              unreadCount > 0 ? 'bg-blue-50/70 dark:bg-blue-950/30' : ''
+                            }`}
                           >
                             <div className="relative shrink-0">
-                              <img
+                              <SmartImage
                                 src={contact.avatar}
                                 alt={contact.name}
-                                referrerPolicy="no-referrer"
+                                fallbackType="avatar"
+                                fallbackLabel={contact.name}
                                 className="w-10 h-10 rounded-full object-cover"
                               />
                               <span
@@ -746,22 +789,50 @@ export const Navbar: React.FC = () => {
                                 <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
                                   {language === 'bn' ? contact.nameBn || contact.name : contact.name}
                                 </p>
-                                <span
-                                  className={`text-[10px] font-bold ${
-                                    isOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'
-                                  }`}
-                                >
-                                  {isOnline
-                                    ? language === 'bn'
-                                      ? 'অনলাইন'
-                                      : 'Online'
-                                    : language === 'bn'
-                                    ? 'অফলাইন'
-                                    : 'Offline'}
-                                </span>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {unreadCount > 0 && (
+                                    <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-blue-600 text-white text-[10px] font-extrabold flex items-center justify-center">
+                                      {unreadCount}
+                                    </span>
+                                  )}
+                                  <span
+                                    className={`text-[10px] font-bold ${
+                                      isOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'
+                                    }`}
+                                  >
+                                    {isOnline
+                                      ? language === 'bn'
+                                        ? 'অনলাইন'
+                                        : 'Online'
+                                      : language === 'bn'
+                                      ? 'অফলাইন'
+                                      : 'Offline'}
+                                  </span>
+                                </div>
                               </div>
-                              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                                {lastMsg ? lastMsg.text : t.activeNow}
+                              <p
+                                className={`text-xs truncate ${
+                                  unreadCount > 0
+                                    ? 'font-bold text-slate-900 dark:text-slate-100'
+                                    : 'text-slate-500 dark:text-slate-400'
+                                }`}
+                              >
+                                {lastMsg
+                                  ? lastMsg.text ||
+                                    (lastMsg.audioUrl
+                                      ? language === 'bn'
+                                        ? '🎙️ ভয়েস নোট'
+                                        : '🎙️ Voice Note'
+                                      : lastMsg.mediaType === 'video'
+                                      ? language === 'bn'
+                                        ? '🎬 ভিডিও'
+                                        : '🎬 Video'
+                                      : lastMsg.mediaUrl
+                                      ? language === 'bn'
+                                        ? '📷 ছবি'
+                                        : '📷 Photo'
+                                      : t.activeNow)
+                                  : t.activeNow}
                               </p>
                             </div>
                           </button>
@@ -769,7 +840,13 @@ export const Navbar: React.FC = () => {
                       })
                     ) : (
                       <p className="text-xs text-slate-400 text-center py-4">
-                        {language === 'bn' ? 'কোনো ব্যবহারকারী পাওয়া যায়নি' : 'No contacts found'}
+                        {messengerFilter === 'unread'
+                          ? language === 'bn'
+                            ? 'কোনো অপঠিত মেসেজ নেই'
+                            : 'No unread chats'
+                          : language === 'bn'
+                          ? 'কোনো ব্যবহারকারী পাওয়া যায়নি'
+                          : 'No contacts found'}
                       </p>
                     )
                   ) : (
@@ -787,10 +864,11 @@ export const Navbar: React.FC = () => {
                           className="w-full flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-left transition-colors cursor-pointer"
                         >
                           <div className="relative shrink-0">
-                            <img
+                            <SmartImage
                               src={grp.coverImage}
                               alt={grp.name}
-                              referrerPolicy="no-referrer"
+                              fallbackType="avatar"
+                              fallbackLabel={grp.name}
                               className="w-10 h-10 rounded-xl object-cover"
                             />
                             <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full" />
@@ -900,10 +978,11 @@ export const Navbar: React.FC = () => {
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               className="flex items-center gap-1 cursor-pointer p-0.5 rounded-full hover:ring-2 hover:ring-blue-500 transition-all relative"
             >
-              <img
+              <SmartImage
                 src={currentUser?.avatar || createAvatarUrl(currentUser?.name || 'User', '#1877F2', '#ffffff')}
                 alt={currentUser?.name || 'User'}
-                referrerPolicy="no-referrer"
+                fallbackType="avatar"
+                fallbackLabel={currentUser?.name || 'User'}
                 className="w-9 h-9 rounded-full object-cover border border-slate-200 dark:border-slate-700"
               />
               <span
@@ -922,10 +1001,11 @@ export const Navbar: React.FC = () => {
                   }}
                   className="w-full flex items-center gap-3 p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-left cursor-pointer"
                 >
-                  <img
+                  <SmartImage
                     src={currentUser?.avatar || createAvatarUrl(currentUser?.name || 'User', '#1877F2', '#ffffff')}
                     alt={currentUser?.name || 'User'}
-                    referrerPolicy="no-referrer"
+                    fallbackType="avatar"
+                    fallbackLabel={currentUser?.name || 'User'}
                     className="w-12 h-12 rounded-full object-cover"
                   />
                   <div className="truncate">
