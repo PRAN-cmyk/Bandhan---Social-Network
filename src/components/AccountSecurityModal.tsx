@@ -66,6 +66,11 @@ export const AccountSecurityModal: React.FC = () => {
     addActivityLog,
     posts,
     albums,
+    blockedUserIds,
+    unblockUser,
+    contacts,
+    profiles,
+    sendPasswordReset,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<
@@ -101,33 +106,43 @@ export const AccountSecurityModal: React.FC = () => {
   // Activity Log Filter
   const [activityFilter, setActivityFilter] = useState<'all' | 'login' | 'security' | 'post' | 'settings'>('all');
 
-  // Active Sessions
-  const [sessions, setSessions] = useState([
-    {
-      id: 'sess_1',
-      device: 'Current Device • Chrome on Linux',
-      location: 'Dhaka, Bangladesh',
-      ip: '103.25.14.92',
+  // Notification Sound Preference
+  const [notifSoundEnabled, setNotifSoundEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('bandhan_notif_sound') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  // Authentic Current Device Session Info (no fake remote IPs/devices)
+  const [sessions, setSessions] = useState(() => {
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    const isMobile = /Mobile|Android|iPhone/i.test(ua);
+    const browserName = ua.includes('Edg')
+      ? 'Edge'
+      : ua.includes('Chrome')
+      ? 'Chrome'
+      : ua.includes('Firefox')
+      ? 'Firefox'
+      : ua.includes('Safari')
+      ? 'Safari'
+      : 'Web Browser';
+    const platformName =
+      typeof navigator !== 'undefined' && navigator.platform ? navigator.platform : 'Web Platform';
+    const screenInfo =
+      typeof window !== 'undefined' ? `${window.screen.width}×${window.screen.height}` : '';
+
+    const currentSess = {
+      id: 'sess_current',
+      device: `${isMobile ? 'Mobile' : 'Desktop'} • ${browserName} (${platformName})`,
+      location: typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'Current Browser',
+      meta: screenInfo ? `Viewport ${screenInfo}` : 'Verified Local Vault',
       isCurrent: true,
-      lastActive: 'Active Now',
-    },
-    {
-      id: 'sess_2',
-      device: 'Samsung Galaxy S24 Ultra',
-      location: 'Chattogram, Bangladesh',
-      ip: '118.179.42.11',
-      isCurrent: false,
-      lastActive: '2 hours ago',
-    },
-    {
-      id: 'sess_3',
-      device: 'iPad Pro • Safari 17',
-      location: 'Sylhet, Bangladesh',
-      ip: '103.114.96.25',
-      isCurrent: false,
-      lastActive: '3 days ago',
-    },
-  ]);
+      lastActive: language === 'bn' ? 'এখনই সক্রিয়' : 'Active Now',
+    };
+    return [currentSess];
+  });
 
   // Timer for 2FA OTP simulation
   useEffect(() => {
@@ -1105,6 +1120,112 @@ export const AccountSecurityModal: React.FC = () => {
                     : 'Offline (Off)'}
                 </button>
               </div>
+
+              {/* Notification Sound Preference */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                <div>
+                  <h5 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <Bell className="w-4 h-4 text-blue-500" />
+                    <span>{language === 'bn' ? 'নোটিফিকেশন ও মেসেজ সাউন্ড' : 'Notification & Message Sounds'}</span>
+                  </h5>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {language === 'bn'
+                      ? 'নতুন মেসেজ বা নোটিফিকেশনে অ্যালার্ট সাউন্ড চালু বা বন্ধ রাখুন।'
+                      : 'Control alert chimes for incoming messages and notifications.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !notifSoundEnabled;
+                    setNotifSoundEnabled(next);
+                    try {
+                      localStorage.setItem('bandhan_notif_sound', String(next));
+                    } catch {}
+                    showToast(
+                      next
+                        ? language === 'bn'
+                          ? '🔔 নোটিফিকেশন সাউন্ড চালু করা হয়েছে'
+                          : '🔔 Notification sounds enabled'
+                        : language === 'bn'
+                        ? '🔕 নোটিফিকেশন সাউন্ড মিউট করা হয়েছে'
+                        : '🔕 Notification sounds muted',
+                    );
+                  }}
+                  className={`rounded-xl transition-colors cursor-pointer text-xs font-bold px-3 py-1.5 ${
+                    notifSoundEnabled
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                      : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  {notifSoundEnabled
+                    ? language === 'bn'
+                      ? 'চালু (On)'
+                      : 'Enabled'
+                    : language === 'bn'
+                    ? 'বন্ধ (Muted)'
+                    : 'Muted'}
+                </button>
+              </div>
+
+              {/* Blocked Accounts Manager */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h5 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 text-amber-500" />
+                    <span>{language === 'bn' ? 'ব্লক করা অ্যাকাউন্ট তালিকা' : 'Blocked Accounts'}</span>
+                  </h5>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                    {blockedUserIds.length}
+                  </span>
+                </div>
+                {blockedUserIds.length === 0 ? (
+                  <p className="text-xs text-slate-400">
+                    {language === 'bn' ? 'আপনি কাউকে ব্লক করেননি।' : 'You have not blocked any users.'}
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {blockedUserIds.map((uid) => {
+                      const foundUser =
+                        contacts.find((c) => c.id === uid) || profiles.find((p) => p.id === uid);
+                      return (
+                        <div
+                          key={uid}
+                          className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {foundUser?.avatar ? (
+                              <img
+                                src={foundUser.avatar}
+                                alt={foundUser.name}
+                                className="w-8 h-8 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold">
+                                ?
+                              </div>
+                            )}
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                              {foundUser
+                                ? language === 'bn'
+                                  ? foundUser.nameBn || foundUser.name
+                                  : foundUser.name
+                                : uid}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => unblockUser(uid)}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold cursor-pointer"
+                          >
+                            {language === 'bn' ? 'আনব্লক' : 'Unblock'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -1174,6 +1295,26 @@ export const AccountSecurityModal: React.FC = () => {
                   </button>
                 </form>
               </div>
+
+              {currentUser.email && (
+                <div className="bg-blue-50 dark:bg-blue-950/30 rounded-2xl p-4 border border-blue-200 dark:border-blue-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h5 className="font-bold text-xs sm:text-sm text-blue-950 dark:text-blue-100">
+                      {language === 'bn' ? 'ফায়ারবেস ইমেইল পাসওয়ার্ড রিসেট' : 'Firebase Email Password Reset'}
+                    </h5>
+                    <p className="text-xs text-blue-800/80 dark:text-blue-300/80 mt-0.5">
+                      {currentUser.email}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => sendPasswordReset(currentUser.email!)}
+                    className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold cursor-pointer shrink-0"
+                  >
+                    {language === 'bn' ? 'রিসেট ইমেইল পাঠান' : 'Send Reset Link'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -1220,7 +1361,7 @@ export const AccountSecurityModal: React.FC = () => {
                           )}
                         </h5>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                          {sess.location} • {sess.ip} • {sess.lastActive}
+                          {sess.location} • {sess.meta} • {sess.lastActive}
                         </p>
                       </div>
                     </div>
@@ -1253,6 +1394,23 @@ export const AccountSecurityModal: React.FC = () => {
                 >
                   {language === 'bn' ? 'ডাউনলোড' : 'Download'}
                 </button>
+              </div>
+
+              {/* Copyright & Community Protection Info */}
+              <div className="bg-indigo-50/70 dark:bg-indigo-950/30 rounded-2xl p-4 border border-indigo-200 dark:border-indigo-900/60 space-y-1.5">
+                <h5 className="font-bold text-xs sm:text-sm text-indigo-950 dark:text-indigo-100 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                  <span>
+                    {language === 'bn'
+                      ? 'কপিরাইট সুরক্ষা ও কমিউনিটি নীতিমালা'
+                      : 'Copyright Protection & Community Policy'}
+                  </span>
+                </h5>
+                <p className="text-xs text-indigo-900/80 dark:text-indigo-200/80 leading-relaxed">
+                  {language === 'bn'
+                    ? 'বন্ধনে প্রকাশিত প্রতিটি মৌলিক রিল, অডিও ও ফটো ক্রিয়েটরের নিজস্ব সম্পত্তি। অন্যের কন্টেন্ট ব্যবহারের পূর্বে মূল ক্রিয়েটরের অনুমতি ও অ্যাট্রিবিউশন বজায় রাখা বাধ্যতামূলক।'
+                    : 'Every original Reel, Audio Track, and Photo published on Bandhan belongs to its creator. Respect creator licensing and attribution rules across all uploads.'}
+                </p>
               </div>
 
               {/* Danger Zone: Delete Account */}

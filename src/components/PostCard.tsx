@@ -38,6 +38,7 @@ import { useApp } from '../context/AppContext';
 import { ShareModal } from './ShareModal';
 import { PostInsightsModal } from './PostInsightsModal';
 import { LiveWatchModal } from './LiveWatchModal';
+import { createAvatarUrl } from '../data/mockData';
 
 interface PostCardProps {
   post: Post;
@@ -140,7 +141,6 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
 
   const [burstingReaction, setBurstingReaction] = useState<{ emoji: string; particles: string[] } | null>(null);
   const burstTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [liveViewerCount, setLiveViewerCount] = useState(() => 142 + Math.floor(Math.random() * 90));
   const [commentSortOrder, setCommentSortOrder] = useState<'top' | 'recent' | 'oldest'>('top');
 
   // Self-destruct live countdown
@@ -1331,7 +1331,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
           <form onSubmit={handleAddComment} className="space-y-2">
             <div className="flex items-center gap-2">
               <img
-                src={currentUser?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
+                src={currentUser?.avatar || createAvatarUrl(currentUser?.name || 'User', '#1877F2', '#ffffff')}
                 alt={currentUser?.name || 'User'}
                 referrerPolicy="no-referrer"
                 className="w-8 h-8 rounded-full object-cover shrink-0"
@@ -1489,7 +1489,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
                 <div key={comment.id} className="space-y-2">
                   <div className="flex items-start gap-2.5">
                     <img
-                      src={comment.author?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
+                      src={comment.author?.avatar || createAvatarUrl(comment.author?.name || 'User', '#1877F2', '#ffffff')}
                       alt={comment.author?.name || 'User'}
                       referrerPolicy="no-referrer"
                       className="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5"
@@ -1701,7 +1701,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
                             return (
                               <div key={reply.id} className="flex items-start gap-2">
                                 <img
-                                  src={reply.author?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
+                                  src={reply.author?.avatar || createAvatarUrl(reply.author?.name || 'User', '#1877F2', '#ffffff')}
                                   alt={reply.author?.name || 'User'}
                                   referrerPolicy="no-referrer"
                                   className="w-6 h-6 rounded-full object-cover shrink-0 mt-0.5"

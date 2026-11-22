@@ -10,9 +10,13 @@ import {
   KeyRound,
   X,
   CheckCircle2,
+  Eye,
+  EyeOff,
+  AlertCircle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { fileToDataUrl } from '../utils/storage';
+import { createAvatarUrl } from '../data/mockData';
 
 export const AuthScreen: React.FC = () => {
   const {
@@ -36,16 +40,21 @@ export const AuthScreen: React.FC = () => {
   // Login form state
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [showLoginPass, setShowLoginPass] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isAuthBusy, setIsAuthBusy] = useState(false);
 
   // Quick card PIN unlock state
   const [selectedLockedUserId, setSelectedLockedUserId] = useState<string | null>(null);
   const [quickPin, setQuickPin] = useState('');
+  const [showQuickPin, setShowQuickPin] = useState(false);
 
   // Forgot PIN / Password state
   const [isForgotPinOpen, setIsForgotPinOpen] = useState(false);
   const [forgotPinTargetUserId, setForgotPinTargetUserId] = useState<string | null>(null);
   const [resetIdentifier, setResetIdentifier] = useState('');
   const [newResetPin, setNewResetPin] = useState('');
+  const [showResetPin, setShowResetPin] = useState(false);
 
   // Sign Up form state (Facebook-style registration)
   const [firstName, setFirstName] = useState('');
@@ -54,6 +63,7 @@ export const AuthScreen: React.FC = () => {
   const [emailOrPhone, setEmailOrPhone] = useState('');
   const [username, setUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [showSignupPass, setShowSignupPass] = useState(false);
   const [city, setCity] = useState('Dhaka, Bangladesh');
   const [workplace, setWorkplace] = useState('');
   const [bio, setBio] = useState('');
@@ -62,12 +72,28 @@ export const AuthScreen: React.FC = () => {
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError(null);
     if (!identifier.trim()) return;
     if (identifier.includes('@') && password.trim()) {
-      const ok = await signInWithEmail(identifier.trim(), password.trim());
-      if (ok) return;
+      setIsAuthBusy(true);
+      try {
+        const ok = await signInWithEmail(identifier.trim(), password.trim());
+        if (ok) return;
+      } catch (err: any) {
+        setAuthError(err?.message || 'Login failed');
+        setIsAuthBusy(false);
+        return;
+      }
+      setIsAuthBusy(false);
     }
-    loginAccount(identifier, password);
+    const localOk = loginAccount(identifier, password);
+    if (!localOk) {
+      setAuthError(
+        language === 'bn'
+          ? 'ভুল ইউজারনেম, ইমেইল বা পাসওয়ার্ড/পিন দেওয়া হয়েছে।'
+          : 'Invalid username, email, or password/PIN.',
+      );
+    }
   };
 
   const handleQuickAccountClick = (userId: string, hasPin: boolean) => {
@@ -133,22 +159,39 @@ export const AuthScreen: React.FC = () => {
 
   const handleSignUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError(null);
     const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
     if (!fullName) return;
 
     const isEmail = emailOrPhone.includes('@');
     if (isEmail && newPassword.trim()) {
-      const ok = await registerWithEmail(
-        emailOrPhone.trim(),
-        newPassword.trim(),
-        fullName,
-        nameBn.trim() || fullName,
-      );
-      if (ok) return;
+      if (newPassword.trim().length < 6) {
+        setAuthError(
+          language === 'bn'
+            ? 'ইমেইল অ্যাকাউন্টের পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।'
+            : 'Email account password must be at least 6 characters long.',
+        );
+        return;
+      }
+      setIsAuthBusy(true);
+      try {
+        const ok = await registerWithEmail(
+          emailOrPhone.trim(),
+          newPassword.trim(),
+          fullName,
+          nameBn.trim() || fullName,
+        );
+        if (ok) return;
+      } catch (err: any) {
+        setAuthError(err?.message || 'Registration failed');
+        setIsAuthBusy(false);
+        return;
+      }
+      setIsAuthBusy(false);
     }
 
     const cleanUser =
-      username.trim() ||
+      username.trim().toLowerCase().replace(/[^a-z0-9._]/g, '_') ||
       firstName.trim().toLowerCase().replace(/\s+/g, '_') +
         '_' +
         Math.floor(100 + Math.random() * 899);
@@ -162,11 +205,25 @@ export const AuthScreen: React.FC = () => {
       city: city.trim() || 'Dhaka, Bangladesh',
       workplace: workplace.trim() || 'Bandhan Creator',
       bio: bio.trim() || 'New on Bandhan Social Network ✨',
-      avatar: avatarUrl || undefined,
+      avatar: avatarUrl || createAvatarUrl(fullName, '#1877F2', '#ffffff'),
       coverImage: coverUrl || undefined,
       pin: newPassword.trim() || undefined,
     });
   };
+
+  const getPasswordStrength = (pw: string) => {
+    if (!pw) return null;
+    if (pw.length < 4) return { labelBn: 'দুর্বল', labelEn: 'Too short', color: 'bg-rose-500', width: 'w-1/4' };
+    if (pw.length < 6) return { labelBn: 'মাঝারি (পিন)', labelEn: 'PIN / Basic', color: 'bg-amber-500', width: 'w-2/4' };
+    if (pw.length < 10) return { labelBn: 'ভালো', labelEn: 'Good', color: 'bg-blue-500', width: 'w-3/4' };
+    return { labelBn: 'শক্তিশালী', labelEn: 'Strong', color: 'bg-emerald-500', width: 'w-full' };
+  };
+  const signupStrength = getPasswordStrength(newPassword);
+  const fullNamePreview = `${firstName.trim()} ${lastName.trim()}`.trim() || 'Bandhan User';
+  const usernamePreview =
+    username.trim().toLowerCase().replace(/[^a-z0-9._]/g, '_') ||
+    firstName.trim().toLowerCase().replace(/\s+/g, '_') ||
+    'new_user';
 
   const lockedProfile = profiles.find((p) => p.id === selectedLockedUserId);
 
@@ -280,15 +337,24 @@ export const AuthScreen: React.FC = () => {
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <input
-                    type="password"
-                    required
-                    autoFocus
-                    value={quickPin}
-                    onChange={(e) => setQuickPin(e.target.value)}
-                    placeholder="••••"
-                    className="flex-1 px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm"
-                  />
+                  <div className="relative flex-1">
+                    <input
+                      type={showQuickPin ? 'text' : 'password'}
+                      required
+                      autoFocus
+                      value={quickPin}
+                      onChange={(e) => setQuickPin(e.target.value)}
+                      placeholder="••••"
+                      className="w-full px-3.5 py-2 pr-9 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickPin((p) => !p)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      {showQuickPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                   <button
                     type="submit"
                     className="px-4 py-2 rounded-xl bg-[#1877F2] hover:bg-blue-700 text-white text-xs font-bold cursor-pointer"
@@ -363,6 +429,20 @@ export const AuthScreen: React.FC = () => {
         {/* Right Column: Facebook-Style Login Box OR Sign-Up Box */}
         <div className="lg:col-span-5 w-full max-w-md mx-auto">
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6">
+            {authError && (
+              <div className="mb-3.5 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 flex items-start gap-2 text-xs text-rose-700 dark:text-rose-300">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span className="flex-1 font-medium leading-relaxed">{authError}</span>
+                <button
+                  type="button"
+                  onClick={() => setAuthError(null)}
+                  className="text-rose-400 hover:text-rose-600 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {mode === 'login' ? (
               <div className="space-y-4">
                 <form onSubmit={handleLoginSubmit} className="space-y-3.5">
@@ -381,9 +461,9 @@ export const AuthScreen: React.FC = () => {
                     />
                   </div>
 
-                  <div>
+                  <div className="relative">
                     <input
-                      type="password"
+                      type={showLoginPass ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder={
@@ -391,8 +471,16 @@ export const AuthScreen: React.FC = () => {
                           ? 'পাসওয়ার্ড বা গোপন পিন (যদি দেয়া থাকে)'
                           : 'Password or Security PIN (if set)'
                       }
-                      className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#1877F2]"
+                      className="w-full px-4 py-3 pr-10 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#1877F2]"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPass((p) => !p)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      aria-label="Toggle password visibility"
+                    >
+                      {showLoginPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
 
                   <div className="text-right">
@@ -411,7 +499,8 @@ export const AuthScreen: React.FC = () => {
 
                   <button
                     type="submit"
-                    className="w-full py-3 rounded-xl bg-[#1877F2] hover:bg-blue-700 text-white font-extrabold text-base shadow-md transition-colors cursor-pointer flex items-center justify-center gap-2"
+                    disabled={isAuthBusy}
+                    className="w-full py-3 rounded-xl bg-[#1877F2] hover:bg-blue-700 disabled:opacity-60 text-white font-extrabold text-base shadow-md transition-colors cursor-pointer flex items-center justify-center gap-2"
                   >
                     <LogIn className="w-5 h-5" />
                     <span>{language === 'bn' ? 'লগইন করুন' : 'Log In'}</span>
@@ -421,8 +510,19 @@ export const AuthScreen: React.FC = () => {
                 {/* Official Sign in with Google (Firebase Auth + Google Drive OAuth) */}
                 <button
                   type="button"
-                  onClick={() => signInWithGoogleAccount()}
-                  className="gsi-material-button w-full py-2.5 px-4 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 font-bold text-sm border border-slate-300 dark:border-slate-700 shadow-xs flex items-center justify-center gap-3 cursor-pointer transition-all"
+                  disabled={isAuthBusy}
+                  onClick={async () => {
+                    setAuthError(null);
+                    setIsAuthBusy(true);
+                    try {
+                      await signInWithGoogleAccount();
+                    } catch (err: any) {
+                      setAuthError(err?.message || 'Google sign-in failed');
+                    } finally {
+                      setIsAuthBusy(false);
+                    }
+                  }}
+                  className="gsi-material-button w-full py-2.5 px-4 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-60 text-slate-800 dark:text-slate-100 font-bold text-sm border border-slate-300 dark:border-slate-700 shadow-xs flex items-center justify-center gap-3 cursor-pointer transition-all"
                 >
                   <div className="gsi-material-button-icon w-5 h-5 shrink-0">
                     <svg
@@ -544,21 +644,47 @@ export const AuthScreen: React.FC = () => {
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm"
                 />
 
-                <div className="grid grid-cols-2 gap-2.5">
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder={language === 'bn' ? 'ইউজারনেম (@username)' : 'Username'}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm"
-                  />
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder={language === 'bn' ? 'নতুন পাসওয়ার্ড / পিন' : 'New password / PIN'}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <input
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder={language === 'bn' ? 'ইউজারনেম (@username)' : 'Username'}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-0.5 pl-1 truncate">
+                      @{usernamePreview}
+                    </p>
+                  </div>
+                  <div>
+                    <div className="relative">
+                      <input
+                        type={showSignupPass ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder={language === 'bn' ? 'নতুন পাসওয়ার্ড / পিন' : 'New password / PIN'}
+                        className="w-full px-3.5 py-2.5 pr-9 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs sm:text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowSignupPass((p) => !p)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        {showSignupPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    {signupStrength && (
+                      <div className="mt-1 flex items-center gap-2 px-1">
+                        <div className="flex-1 h-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                          <div className={`h-full ${signupStrength.color} ${signupStrength.width} transition-all`} />
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-500">
+                          {language === 'bn' ? signupStrength.labelBn : signupStrength.labelEn}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2.5">
@@ -585,6 +711,30 @@ export const AuthScreen: React.FC = () => {
                   placeholder={language === 'bn' ? 'সংক্ষিপ্ত বায়ো লিখুন...' : 'Short bio...'}
                   className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs"
                 />
+
+                {/* Quick Preset SVG Avatars */}
+                <div className="flex items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <span className="text-[11px] font-bold text-slate-500 shrink-0">
+                    {language === 'bn' ? 'অথবা অবতার বাছুন:' : 'Preset Avatar:'}
+                  </span>
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                    {['#1877F2', '#db2777', '#059669', '#7c3aed', '#ea580c'].map((hex) => {
+                      const preset = createAvatarUrl(fullNamePreview, hex, '#ffffff');
+                      return (
+                        <button
+                          key={hex}
+                          type="button"
+                          onClick={() => setAvatarUrl(preset)}
+                          className={`w-7 h-7 rounded-full overflow-hidden border-2 transition-transform hover:scale-110 cursor-pointer shrink-0 ${
+                            avatarUrl === preset ? 'border-blue-600 ring-2 ring-blue-500/30' : 'border-white dark:border-slate-700'
+                          }`}
+                        >
+                          <img src={preset} alt="Preset avatar" className="w-full h-full object-cover" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
                 {/* Profile & Cover Photo Upload */}
                 <div className="grid grid-cols-2 gap-2.5">
@@ -629,7 +779,8 @@ export const AuthScreen: React.FC = () => {
 
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-xl bg-[#42b72a] hover:bg-[#36a420] text-white font-extrabold text-sm sm:text-base shadow-md transition-colors cursor-pointer flex items-center justify-center gap-2"
+                  disabled={isAuthBusy}
+                  className="w-full py-3 rounded-xl bg-[#42b72a] hover:bg-[#36a420] disabled:opacity-60 text-white font-extrabold text-sm sm:text-base shadow-md transition-colors cursor-pointer flex items-center justify-center gap-2"
                 >
                   <CheckCircle2 className="w-5 h-5" />
                   <span>
@@ -731,15 +882,24 @@ export const AuthScreen: React.FC = () => {
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   {language === 'bn' ? 'নতুন ৪-সংখ্যার পিন বা পাসওয়ার্ড দিন' : 'Enter New 4-Digit PIN or Password'}
                 </label>
-                <input
-                  type="password"
-                  required
-                  autoFocus
-                  value={newResetPin}
-                  onChange={(e) => setNewResetPin(e.target.value)}
-                  placeholder="••••"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-[#1877F2]"
-                />
+                <div className="relative">
+                  <input
+                    type={showResetPin ? 'text' : 'password'}
+                    required
+                    autoFocus
+                    value={newResetPin}
+                    onChange={(e) => setNewResetPin(e.target.value)}
+                    placeholder="••••"
+                    className="w-full px-3.5 py-2.5 pr-10 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-[#1877F2]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPin((p) => !p)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showResetPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
                 <p className="text-[11px] text-slate-400 mt-1">
                   {language === 'bn'
                     ? 'নতুন পিন সেট করলে পুরনো পিন বাতিল হয়ে যাবে এবং সাথে সাথে অ্যাকাউন্টে ঢুকতে পারবেন।'

@@ -14,6 +14,10 @@ import {
   X,
   Eye,
   EyeOff,
+  Search,
+  Volume2,
+  VolumeX,
+  Settings,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { AppNotification } from '../types';
@@ -38,20 +42,35 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, 
     declineFriendRequest,
     viewUserProfile,
     setActiveTab,
+    setIsAccountSecurityOpen,
     language,
+    showToast,
     t,
   } = useApp();
 
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('bandhan_notif_sound') !== 'false';
+    } catch {
+      return true;
+    }
+  });
 
   if (!isOpen) return null;
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   const filteredNotifications = notifications.filter((n) => {
-    if (activeFilter === 'unread') return !n.isRead;
-    if (activeFilter === 'interactions') return n.type === 'reaction' || n.type === 'comment' || n.type === 'mention';
-    if (activeFilter === 'requests') return n.type === 'friend_request';
+    if (activeFilter === 'unread' && n.isRead) return false;
+    if (activeFilter === 'interactions' && n.type !== 'reaction' && n.type !== 'comment' && n.type !== 'mention') return false;
+    if (activeFilter === 'requests' && n.type !== 'friend_request') return false;
+    if (searchTerm.trim()) {
+      const q = searchTerm.trim().toLowerCase();
+      const hay = `${n.sender.name} ${n.sender.nameBn || ''} ${n.textEn} ${n.textBn}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
     return true;
   });
 
@@ -79,6 +98,18 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, 
         return (
           <span className="w-5 h-5 rounded-full bg-purple-500 text-white flex items-center justify-center text-[10px] shadow-sm">
             🌐
+          </span>
+        );
+      case 'birthday':
+        return (
+          <span className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center text-[10px] shadow-sm">
+            🎂
+          </span>
+        );
+      case 'mention':
+        return (
+          <span className="w-5 h-5 rounded-full bg-indigo-500 text-white flex items-center justify-center text-[10px] shadow-sm">
+            @
           </span>
         );
       default:
@@ -153,11 +184,61 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, 
           )}
 
           <button
+            type="button"
+            onClick={() => {
+              const next = !soundEnabled;
+              setSoundEnabled(next);
+              try {
+                localStorage.setItem('bandhan_notif_sound', String(next));
+              } catch {}
+              showToast(
+                next
+                  ? language === 'bn'
+                    ? '🔔 নোটিফিকেশন সাউন্ড চালু হয়েছে'
+                    : '🔔 Notification sound enabled'
+                  : language === 'bn'
+                  ? '🔕 নোটিফিকেশন সাউন্ড মিউট হয়েছে'
+                  : '🔕 Notification sound muted',
+              );
+            }}
+            title={soundEnabled ? 'Mute notification alerts' : 'Unmute notification alerts'}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-emerald-500" /> : <VolumeX className="w-3.5 h-3.5" />}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              setIsAccountSecurityOpen(true);
+            }}
+            title={language === 'bn' ? 'সেটিংস ও প্রাইভেসি' : 'Notification & Privacy Settings'}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            <Settings className="w-3.5 h-3.5" />
+          </button>
+
+          <button
             onClick={onClose}
             className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
+        </div>
+      </div>
+
+      {/* Quick Notification Search */}
+      <div className="pt-2">
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder={language === 'bn' ? 'নোটিফিকেশন খুঁজুন...' : 'Search notifications...'}
+            className="w-full pl-8 pr-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
         </div>
       </div>
 
@@ -296,9 +377,9 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, 
                   )}
                 </div>
 
-                {/* Hover Actions: Toggle Read / Delete */}
+                {/* Actions: visible on touch devices, hover-reveal on desktop */}
                 <div
-                  className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 self-center shrink-0"
+                  className="opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center gap-1 self-center shrink-0"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button

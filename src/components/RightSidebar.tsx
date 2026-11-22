@@ -402,7 +402,7 @@ export const RightSidebar: React.FC = () => {
           <div className="flex items-center gap-2">
             <span
               className={`w-2.5 h-2.5 rounded-full ${
-                isMyStatusOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                isMyStatusOnline ? 'bg-emerald-500' : 'bg-slate-400'
               }`}
             />
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">

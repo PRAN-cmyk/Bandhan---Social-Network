@@ -22,6 +22,7 @@ import {
   Cloud,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { createAvatarUrl } from '../data/mockData';
 import { NotificationCenter } from './NotificationCenter';
 import { CloudinarySettingsModal } from './CloudinarySettingsModal';
 
@@ -61,21 +62,16 @@ export const Navbar: React.FC = () => {
   const [messengerSearch, setMessengerSearch] = useState('');
   const [isCloudinaryModalOpen, setIsCloudinaryModalOpen] = useState(false);
 
-  // Local storage recent search history system
+  // Local storage recent search history system (starts empty unless searched)
   const [searchHistory, setSearchHistory] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem('bandhan_navbar_search_history');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
-    return [
-      'Tanvir Hasan',
-      'Bangladesh Developers',
-      'MacBook Pro',
-      'Landscape Photography',
-    ];
+    return [];
   });
 
   const saveQueryToHistory = (query: string) => {
@@ -289,31 +285,33 @@ export const Navbar: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Quick Popular Suggestions */}
+                    {/* Dynamic Suggestions from Live Contacts, Groups & Marketplace */}
                     <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800">
                       <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
                         {language === 'bn' ? 'প্রস্তাবিত সার্চসমূহ' : 'Suggested Searches'}
                       </div>
                       <div className="flex flex-wrap gap-1.5">
-                        {[
-                          'Tanvir Hasan',
-                          'Bangladesh Developers',
-                          'Tech Community',
-                          'MacBook Pro',
-                          'Photography',
-                        ].map((sug, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => {
-                              setSearchInput(sug);
-                              saveQueryToHistory(sug);
-                            }}
-                            className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-950/50 hover:text-blue-600 text-[11px] font-medium text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
-                          >
-                            {sug}
-                          </button>
-                        ))}
+                        {Array.from(
+                          new Set([
+                            ...contacts.slice(0, 2).map((c) => c.name),
+                            ...groups.slice(0, 2).map((g) => g.name),
+                            ...marketplace.slice(0, 1).map((m) => m.title),
+                          ]),
+                        )
+                          .slice(0, 5)
+                          .map((sug, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                setSearchInput(sug);
+                                saveQueryToHistory(sug);
+                              }}
+                              className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-950/50 hover:text-blue-600 text-[11px] font-medium text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+                            >
+                              {sug}
+                            </button>
+                          ))}
                       </div>
                     </div>
                   </div>
@@ -830,7 +828,7 @@ export const Navbar: React.FC = () => {
             >
               <Bell className="w-5 h-5" />
               {unreadNotifs > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1 animate-pulse">
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1">
                   {unreadNotifs}
                 </span>
               )}
@@ -903,7 +901,7 @@ export const Navbar: React.FC = () => {
               className="flex items-center gap-1 cursor-pointer p-0.5 rounded-full hover:ring-2 hover:ring-blue-500 transition-all relative"
             >
               <img
-                src={currentUser?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
+                src={currentUser?.avatar || createAvatarUrl(currentUser?.name || 'User', '#1877F2', '#ffffff')}
                 alt={currentUser?.name || 'User'}
                 referrerPolicy="no-referrer"
                 className="w-9 h-9 rounded-full object-cover border border-slate-200 dark:border-slate-700"
@@ -925,17 +923,20 @@ export const Navbar: React.FC = () => {
                   className="w-full flex items-center gap-3 p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-left cursor-pointer"
                 >
                   <img
-                    src={currentUser?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
+                    src={currentUser?.avatar || createAvatarUrl(currentUser?.name || 'User', '#1877F2', '#ffffff')}
                     alt={currentUser?.name || 'User'}
                     referrerPolicy="no-referrer"
                     className="w-12 h-12 rounded-full object-cover"
                   />
                   <div className="truncate">
-                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
                       {language === 'bn' ? currentUser?.nameBn || currentUser?.name || 'ব্যবহারকারী' : currentUser?.name || 'User'}
                     </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                      @{currentUser?.username || 'member'}
+                    </p>
                     <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">
-                      {language === 'bn' ? 'প্রোফাইল ও সেভড পোস্ট দেখুন' : 'See profile & saved posts'}
+                      {language === 'bn' ? 'প্রোফাইল দেখুন' : 'See your profile'}
                     </p>
                   </div>
                 </button>

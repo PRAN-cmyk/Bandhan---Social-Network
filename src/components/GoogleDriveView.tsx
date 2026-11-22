@@ -526,7 +526,8 @@ export const GoogleDriveView: React.FC = () => {
       const res = await fetch('/api/meetings', {
         headers: { Authorization: `Bearer ${idToken}` },
       });
-      if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         const data = await res.json();
         if (Array.isArray(data.meetings)) {
           setSavedMeetings(data.meetings);

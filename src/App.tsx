@@ -64,8 +64,8 @@ const FEED_SUGGESTED_USERS = [
     avatar: createAvatarUrl('Tahmid Hasan', '#2563eb', '#ffffff'),
     bio: 'Full Stack Engineer',
     city: 'Dhaka, Bangladesh',
-    followersCount: 920,
-    friendsCount: 410,
+    followersCount: 0,
+    friendsCount: 0,
   },
   {
     id: 'sug_feed_2',
@@ -75,8 +75,8 @@ const FEED_SUGGESTED_USERS = [
     avatar: createAvatarUrl('Samira Khan', '#db2777', '#ffffff'),
     bio: 'Visual Storyteller & Vlogger',
     city: 'Sylhet, Bangladesh',
-    followersCount: 1540,
-    friendsCount: 520,
+    followersCount: 0,
+    friendsCount: 0,
   },
   {
     id: 'sug_feed_3',
@@ -86,8 +86,8 @@ const FEED_SUGGESTED_USERS = [
     avatar: createAvatarUrl('Imran Mahmud', '#059669', '#ffffff'),
     bio: 'Tech Entrepreneur',
     city: 'Chattogram, Bangladesh',
-    followersCount: 680,
-    friendsCount: 310,
+    followersCount: 0,
+    friendsCount: 0,
   },
   {
     id: 'sug_feed_4',
@@ -97,8 +97,8 @@ const FEED_SUGGESTED_USERS = [
     avatar: createAvatarUrl('Nadia Islam', '#7c3aed', '#ffffff'),
     bio: 'Product Designer',
     city: 'Dhaka, Bangladesh',
-    followersCount: 1120,
-    friendsCount: 450,
+    followersCount: 0,
+    friendsCount: 0,
   },
 ];
 
@@ -128,6 +128,7 @@ const MainContent: React.FC = () => {
     sentFriendRequestIds,
     sendFriendRequest,
     cancelFriendRequest,
+    followingUserIds,
     isFollowingUser,
     toggleFollowUser,
     viewUserProfile,
@@ -139,6 +140,7 @@ const MainContent: React.FC = () => {
   } = useApp();
 
   const [feedCategory, setFeedCategory] = useState<FeedCategoryFilter>('all');
+  const [feedSort, setFeedSort] = useState<'latest' | 'top' | 'following'>('latest');
   const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(() => {
     try {
       return sessionStorage.getItem('bandhan_welcome_shown') !== 'true';
@@ -180,11 +182,28 @@ const MainContent: React.FC = () => {
   );
 
   const filteredPosts = useMemo(() => {
-    if (feedCategory === 'photos') return visibleFeedPosts.filter(isPostPhoto);
-    if (feedCategory === 'videos') return visibleFeedPosts.filter(isPostVideo);
-    if (feedCategory === 'text') return visibleFeedPosts.filter(isPostTextOnly);
-    return visibleFeedPosts;
-  }, [visibleFeedPosts, feedCategory]);
+    let base = visibleFeedPosts;
+    if (feedCategory === 'photos') base = visibleFeedPosts.filter(isPostPhoto);
+    else if (feedCategory === 'videos') base = visibleFeedPosts.filter(isPostVideo);
+    else if (feedCategory === 'text') base = visibleFeedPosts.filter(isPostTextOnly);
+
+    if (feedSort === 'following') {
+      base = base.filter(
+        (p) => p.author?.id === currentUser?.id || followingUserIds.includes(p.author?.id),
+      );
+    } else if (feedSort === 'top') {
+      base = [...base].sort((a, b) => {
+        const scoreA =
+          Object.values(a.reactions || {}).reduce((s, n) => s + (Number(n) || 0), 0) +
+          (a.comments?.length || 0) * 2;
+        const scoreB =
+          Object.values(b.reactions || {}).reduce((s, n) => s + (Number(n) || 0), 0) +
+          (b.comments?.length || 0) * 2;
+        return scoreB - scoreA;
+      });
+    }
+    return base;
+  }, [visibleFeedPosts, feedCategory, feedSort, followingUserIds, currentUser?.id]);
 
   const savedPosts = visibleFeedPosts.filter((p) => p.isSaved);
 
@@ -384,20 +403,45 @@ const MainContent: React.FC = () => {
                       })}
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={refreshFeed}
-                      disabled={isFeedLoading}
-                      className="flex items-center gap-1 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-colors px-2 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0"
-                      title={t.refreshFeed}
-                    >
-                      <RefreshCw
-                        className={`w-3.5 h-3.5 ${isFeedLoading ? 'animate-spin text-blue-600' : ''}`}
-                      />
-                      <span className="hidden sm:inline">
-                        {isFeedLoading ? t.loadingFeed : t.refreshFeed}
-                      </span>
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl">
+                        {(
+                          [
+                            { id: 'latest', en: 'Latest', bn: 'নতুন' },
+                            { id: 'top', en: 'Top', bn: 'সেরা' },
+                            { id: 'following', en: 'Following', bn: 'ফলোয়িং' },
+                          ] as const
+                        ).map((s) => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => setFeedSort(s.id)}
+                            className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                              feedSort === s.id
+                                ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs'
+                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                            }`}
+                          >
+                            {language === 'bn' ? s.bn : s.en}
+                          </button>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={refreshFeed}
+                        disabled={isFeedLoading}
+                        className="flex items-center gap-1 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-colors px-2 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0"
+                        title={t.refreshFeed}
+                      >
+                        <RefreshCw
+                          className={`w-3.5 h-3.5 ${isFeedLoading ? 'animate-spin text-blue-600' : ''}`}
+                        />
+                        <span className="hidden sm:inline">
+                          {isFeedLoading ? t.loadingFeed : t.refreshFeed}
+                        </span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Posts Stream or Skeleton Screen Loaders */}

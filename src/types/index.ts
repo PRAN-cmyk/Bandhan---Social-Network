@@ -103,6 +103,8 @@ export interface Post {
   isSaved?: boolean;
   groupId?: string;
   groupName?: string;
+  pageId?: string;
+  pageName?: string;
   driveFile?: {
     id: string;
     name: string;
@@ -227,6 +229,11 @@ export interface ChatMessage {
   timestamp: string;
   isRead?: boolean;
   seenAt?: number;
+  replyTo?: {
+    id: string;
+    text: string;
+    senderName: string;
+  };
 }
 
 export interface ChatConversation {

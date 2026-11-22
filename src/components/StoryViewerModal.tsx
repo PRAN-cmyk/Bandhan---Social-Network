@@ -15,7 +15,6 @@ import {
   Share2,
   Eye,
   SlidersHorizontal,
-  ExternalLink,
   Plus,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -256,8 +255,9 @@ export const StoryViewerModal: React.FC = () => {
   };
 
   const handleShareStory = () => {
+    const shareUrl = `${window.location.origin}${window.location.pathname}#story=${activeStory.id}`;
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(window.location.href);
+      navigator.clipboard.writeText(shareUrl);
       showToast(
         language === 'bn'
           ? '🔗 স্টোরি লিংক কপি করা হয়েছে!'
@@ -346,28 +346,6 @@ export const StoryViewerModal: React.FC = () => {
           }}
         />
       )}
-
-      {/* Floating Reactions Particle Layer (Instagram / Facebook Style Cascade) */}
-      <div className="absolute inset-0 pointer-events-none z-40 overflow-hidden">
-        {floatingParticles.map((particle) => (
-          <div
-            key={particle.id}
-            className="absolute bottom-16 animate-float-up text-4xl sm:text-5xl drop-shadow-2xl select-none"
-            style={
-              {
-                left: `${particle.x}%`,
-                '--rot': `${particle.rot}deg`,
-                '--rot-mid': `${particle.rotMid}deg`,
-                '--rot-end': `${particle.rotEnd}deg`,
-                transform: `scale(${particle.scale})`,
-                animationDuration: `${particle.duration}s`,
-              } as React.CSSProperties
-            }
-          >
-            {particle.emoji}
-          </div>
-        ))}
-      </div>
 
       {/* Desktop Close button */}
       <button

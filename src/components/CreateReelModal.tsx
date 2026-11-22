@@ -14,6 +14,7 @@ import { useApp } from '../context/AppContext';
 import { fileToDataUrl } from '../utils/storage';
 import { uploadMediaToCloudinary, isVideoFile as checkIsVideoFile } from '../utils/cloudinary';
 import { CloudinarySettingsModal } from './CloudinarySettingsModal';
+import { createAvatarUrl } from '../data/mockData';
 
 const SAMPLE_REEL_VIDEOS = [
   {
@@ -440,7 +441,7 @@ export const CreateReelModal: React.FC = () => {
             <div className="relative z-10 p-3 space-y-1.5 text-white">
               <div className="flex items-center gap-1.5">
                 <img
-                  src={currentUser?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'}
+                  src={currentUser?.avatar || createAvatarUrl(currentUser?.name || 'User', '#1877F2', '#ffffff')}
                   alt={currentUser?.name || 'User'}
                   className="w-6 h-6 rounded-full border border-white/50 object-cover"
                 />

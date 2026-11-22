@@ -60,6 +60,8 @@ import {
   sendChatMessageCloud,
   CloudChatMessage,
 } from '../firebase';
+import coverSkylineImg from '../assets/images/profile_cover_skyline_1790115270776.jpg';
+import scenicTravelImg from '../assets/images/scenic_travel_mountain_1790115283070.jpg';
 
 const INITIAL_PROFILES: User[] = [
   defaultUser,
@@ -279,6 +281,7 @@ interface AppContextType {
     nameBn?: string;
     category: string;
     description: string;
+    avatar?: string;
     coverImage?: string;
   }) => void;
   toggleFollowPage: (pageId: string) => void;
@@ -367,8 +370,16 @@ interface AppContextType {
   sendMessage: (
     friendId: string,
     text: string,
-    options?: { audioUrl?: string; audioDuration?: number; mediaUrl?: string },
+    options?: {
+      audioUrl?: string;
+      audioDuration?: number;
+      mediaUrl?: string;
+      replyTo?: { id: string; text: string; senderName: string };
+    },
   ) => void;
+  deleteMessage: (friendId: string, messageId: string) => void;
+  clearConversation: (friendId: string) => void;
+  markConversationRead: (friendId: string) => void;
   syncCloudChatMessages: (friendId: string, cloudMessages: CloudChatMessage[]) => void;
   activeCall: ActiveCall | null;
   startCall: (friend: User, type: 'audio' | 'video') => void;
@@ -1311,7 +1322,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setDriveAccessToken(token);
         }
 
-        // Fetch posts from authenticated backend API
+        // Fetch posts from authenticated backend API (safely skip HTML 404 on static GitHub Pages)
         fbUser
           .getIdToken()
           .then((idToken) =>
@@ -1319,7 +1330,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               headers: { Authorization: `Bearer ${idToken}` },
             }),
           )
-          .then((res) => (res.ok ? res.json() : null))
+          .then((res) => {
+            const contentType = res.headers.get('content-type') || '';
+            if (!res.ok || !contentType.includes('application/json')) return null;
+            return res.json();
+          })
           .then((data) => {
             if (data && Array.isArray(data.posts) && data.posts.length > 0) {
               setPosts((prev) => {
@@ -1345,17 +1360,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                         username: (row.authorName || 'user').toLowerCase().replace(/\s+/g, '.'),
                         avatar:
                           row.authorAvatar ||
-                          `https://ui-avatars.com/api/?name=${encodeURIComponent(row.authorName || 'User')}`,
-                        followersCount: 120,
-                        friendsCount: 45,
-                        isVerified: true,
+                          createAvatarUrl(row.authorName || 'Bandhan Member', '#1877F2', '#ffffff'),
+                        followersCount: 0,
+                        friendsCount: 0,
+                        isVerified: false,
                       },
                       createdAt: 'Synced',
                       content: row.content,
                       privacy: row.privacy || 'public',
                       image: repairLegacyMediaUrl(row.mediaUrl) || undefined,
                       reactions: {
-                        like: 1,
+                        like: 0,
                         love: 0,
                         care: 0,
                         haha: 0,
@@ -2040,11 +2055,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         title: 'Timeline Uploads',
         titleBn: 'টাইমলাইন ছবি',
         description: 'Photos shared on feed',
-        coverUrl: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=600&auto=format&fit=crop&q=80',
-        photos: [
-          'https://images.unsplash.com/photo-1544717305-2782549b5136?w=600&auto=format&fit=crop&q=80',
-          'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=600&auto=format&fit=crop&q=80',
-        ],
+        coverUrl: coverSkylineImg,
+        photos: [coverSkylineImg],
         createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
         isSystem: true,
       },
@@ -2054,12 +2066,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         title: 'Travel & Memories',
         titleBn: 'ভ্রমণ ও স্মৃতি',
         description: 'Beautiful trips across Bangladesh',
-        coverUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80',
-        photos: [
-          'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80',
-          'https://images.unsplash.com/photo-1519046904884-53103b34b206?w=600&auto=format&fit=crop&q=80',
-          'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=600&auto=format&fit=crop&q=80',
-        ],
+        coverUrl: scenicTravelImg,
+        photos: [scenicTravelImg],
         createdAt: new Date(Date.now() - 86400000 * 12).toISOString(),
         isSystem: false,
       },
@@ -2833,17 +2841,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const sendMessage = (
     friendId: string,
     text: string,
-    options?: { audioUrl?: string; audioDuration?: number; mediaUrl?: string },
+    options?: {
+      audioUrl?: string;
+      audioDuration?: number;
+      mediaUrl?: string;
+      replyTo?: { id: string; text: string; senderName: string };
+    },
   ) => {
     if (!text.trim() && !options?.audioUrl && !options?.mediaUrl) return;
 
     const newMsg: ChatMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
       senderId: currentUser.id,
-      text: text.trim(),
+      text: sanitizeUserContent(text.trim()),
       audioUrl: options?.audioUrl,
       audioDuration: options?.audioDuration,
       mediaUrl: options?.mediaUrl,
+      replyTo: options?.replyTo,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isRead: false,
     };
@@ -2894,6 +2908,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       imageUrl: newMsg.mediaUrl,
     }).catch((err) => {
       console.warn('Chat message cloud sync notice:', err);
+    });
+  };
+
+  const deleteMessage = (friendId: string, messageId: string) => {
+    setConversations((prev) => {
+      const conv = prev[friendId];
+      if (!conv) return prev;
+      const next = {
+        ...prev,
+        [friendId]: {
+          ...conv,
+          messages: conv.messages.filter((m) => m.id !== messageId),
+        },
+      };
+      saveStateToDB('bandhan_conversations', next);
+      return next;
+    });
+    showToast(language === 'bn' ? 'মেসেজ মুছে ফেলা হয়েছে' : 'Message removed');
+  };
+
+  const clearConversation = (friendId: string) => {
+    setConversations((prev) => {
+      const conv = prev[friendId];
+      if (!conv) return prev;
+      const next = {
+        ...prev,
+        [friendId]: {
+          ...conv,
+          messages: [],
+          unreadCount: 0,
+        },
+      };
+      saveStateToDB('bandhan_conversations', next);
+      return next;
+    });
+    showToast(language === 'bn' ? 'চ্যাট ইতিহাস পরিষ্কার করা হয়েছে' : 'Chat cleared');
+  };
+
+  const markConversationRead = (friendId: string) => {
+    setConversations((prev) => {
+      const conv = prev[friendId];
+      if (!conv || conv.unreadCount === 0) return prev;
+      const next = {
+        ...prev,
+        [friendId]: {
+          ...conv,
+          unreadCount: 0,
+          messages: conv.messages.map((m) => ({ ...m, isRead: true })),
+        },
+      };
+      saveStateToDB('bandhan_conversations', next);
+      return next;
     });
   };
 
@@ -3179,6 +3245,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     nameBn?: string;
     category: string;
     description: string;
+    avatar?: string;
     coverImage?: string;
   }) => {
     const cleanName = sanitizeUserContent(data.name.trim()) || 'New Page';
@@ -3188,10 +3255,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       nameBn: data.nameBn ? sanitizeUserContent(data.nameBn.trim()) : cleanName,
       category: sanitizeUserContent(data.category.trim()) || 'Community Page',
       description: sanitizeUserContent(data.description.trim()) || 'Official Bandhan Page',
-      avatar: createAvatarUrl(cleanName, '#1877F2', '#ffffff'),
-      coverImage:
-        data.coverImage ||
-        'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1000&auto=format&fit=crop&q=80',
+      avatar: data.avatar || createAvatarUrl(cleanName, '#1877F2', '#ffffff'),
+      coverImage: data.coverImage || coverSkylineImg,
       followersCount: 1,
       isFollowed: true,
       ownerId: currentUser.id,
@@ -3348,6 +3413,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         openChatWith,
         closeChat,
         sendMessage,
+        deleteMessage,
+        clearConversation,
+        markConversationRead,
         syncCloudChatMessages,
         activeCall,
         startCall,

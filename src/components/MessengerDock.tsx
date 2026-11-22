@@ -13,6 +13,8 @@ import {
   Mic,
   Paperclip,
   Trash2,
+  Reply,
+  Eraser,
 } from 'lucide-react';
 import { uploadMediaToCloudinary } from '../utils/cloudinary';
 import { useApp } from '../context/AppContext';
@@ -31,6 +33,8 @@ export const MessengerDock: React.FC = () => {
     isAuthenticated,
     closeChat,
     sendMessage,
+    deleteMessage,
+    clearConversation,
     syncCloudChatMessages,
     showToast,
     startCall,
@@ -61,6 +65,10 @@ export const MessengerDock: React.FC = () => {
   const prevChatIdsRef = useRef<string[]>([]);
   const prevGroupChatIdRef = useRef<string | null>(null);
 
+  const [replyingToMap, setReplyingToMap] = useState<
+    Record<string, { id: string; text: string; senderName: string } | null>
+  >({});
+
   const startVoiceRecording = async (friendId: string) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -81,7 +89,11 @@ export const MessengerDock: React.FC = () => {
         setRecordingDuration((prev) => prev + 1);
       }, 1000);
     } catch {
-      handleSend(friendId, '🎙️ [ভয়েস মেসেজ (0:12) • Voice Note]');
+      showToast(
+        language === 'bn'
+          ? '🎙️ ভয়েস নোট পাঠাতে ব্রাউজারে মাইক্রোফোনের অনুমতি দিন।'
+          : '🎙️ Please allow microphone permission to record a voice note.',
+      );
     }
   };
 
@@ -159,8 +171,12 @@ export const MessengerDock: React.FC = () => {
           const durStr = `${Math.floor(dur / 60)}:${(dur % 60).toString().padStart(2, '0')}`;
           sendMessage(friendId, `🎙️ Voice Note (${durStr})`, { audioUrl, audioDuration: dur });
         } catch (err) {
-          console.warn('Voice send error fallback:', err);
-          sendMessage(friendId, `🎙️ [ভয়েস মেসেজ • Voice Note]`);
+          console.warn('Voice send error:', err);
+          showToast(
+            language === 'bn'
+              ? 'ভয়েস নোট আপলোড করা যায়নি, আবার চেষ্টা করুন।'
+              : 'Could not upload voice note. Please try again.',
+          );
         } finally {
           rec.stream.getTracks().forEach((track) => track.stop());
         }
@@ -212,9 +228,13 @@ export const MessengerDock: React.FC = () => {
   const handleSend = (friendId: string, customText?: string) => {
     const textToSend = customText ?? inputs[friendId] ?? '';
     if (!textToSend.trim()) return;
-    sendMessage(friendId, textToSend);
+    const replyQuote = replyingToMap[friendId] || undefined;
+    sendMessage(friendId, textToSend, replyQuote ? { replyTo: replyQuote } : undefined);
     if (!customText) {
       setInputs((prev) => ({ ...prev, [friendId]: '' }));
+    }
+    if (replyQuote) {
+      setReplyingToMap((prev) => ({ ...prev, [friendId]: null }));
     }
   };
 
@@ -232,7 +252,30 @@ export const MessengerDock: React.FC = () => {
   const visibleChatIds = activeGroup ? activeChatIds.slice(-1) : activeChatIds.slice(-2);
 
   return (
-    <div className="fixed bottom-16 md:bottom-0 right-2 sm:right-4 z-[45] flex items-end justify-end gap-2 sm:gap-3 max-w-[calc(100vw-1rem)] pointer-events-none">
+    <div className="fixed bottom-16 md:bottom-0 right-2 sm:right-4 z-[45] flex flex-col md:flex-row items-end justify-end gap-2 sm:gap-3 max-w-[calc(100vw-1rem)] pointer-events-none">
+      {/* Mobile Switcher Bar when both Direct & Group Chat are open */}
+      {activeGroup && visibleChatIds.length > 0 && (
+        <div className="md:hidden pointer-events-auto flex items-center gap-1 bg-slate-900/90 backdrop-blur-md text-white px-2 py-1 rounded-full shadow-lg border border-white/15">
+          <button
+            type="button"
+            onClick={() => setActiveMobilePane('direct')}
+            className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold cursor-pointer ${
+              activeMobilePane === 'direct' ? 'bg-blue-600 text-white' : 'text-slate-300'
+            }`}
+          >
+            {language === 'bn' ? 'ডাইরেক্ট চ্যাট' : 'Direct Chat'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveMobilePane('group')}
+            className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold cursor-pointer ${
+              activeMobilePane === 'group' ? 'bg-indigo-600 text-white' : 'text-slate-300'
+            }`}
+          >
+            {language === 'bn' ? 'গ্রুপ চ্যাট' : 'Group Chat'}
+          </button>
+        </div>
+      )}
       {/* ACTIVE GROUP CHAT WINDOW */}
       {activeGroup && (
         <div
@@ -466,6 +509,16 @@ export const MessengerDock: React.FC = () => {
                 >
                   <Video className="w-3.5 h-3.5" />
                 </button>
+                {conv.messages.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => clearConversation(friendId)}
+                    className="p-1.5 rounded-full text-slate-400 hover:text-amber-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                    title={language === 'bn' ? 'চ্যাট পরিষ্কার করুন' : 'Clear chat'}
+                  >
+                    <Eraser className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 <button
                   onClick={() => toggleMinimize(friendId)}
                   className="p-1.5 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
@@ -516,7 +569,7 @@ export const MessengerDock: React.FC = () => {
                     return (
                       <div key={msg.id} className="space-y-1">
                         <div
-                          className={`flex items-end gap-2 ${isMe ? 'justify-end' : 'justify-start'}`}
+                          className={`group/msg flex items-end gap-1.5 ${isMe ? 'justify-end' : 'justify-start'}`}
                         >
                           {!isMe && (
                             <img
@@ -526,13 +579,57 @@ export const MessengerDock: React.FC = () => {
                               className="w-6 h-6 rounded-full object-cover shrink-0"
                             />
                           )}
+
+                          {isMe && (
+                            <div className="opacity-80 sm:opacity-0 sm:group-hover/msg:opacity-100 flex items-center gap-0.5 transition-opacity shrink-0">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setReplyingToMap((prev) => ({
+                                    ...prev,
+                                    [friendId]: {
+                                      id: msg.id,
+                                      text: msg.text || (msg.audioUrl ? '🎙️ Voice Note' : '📎 Attachment'),
+                                      senderName: currentUser.name,
+                                    },
+                                  }))
+                                }
+                                title={language === 'bn' ? 'উত্তর দিন' : 'Reply'}
+                                className="p-1 rounded-full text-slate-400 hover:text-blue-500 cursor-pointer"
+                              >
+                                <Reply className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteMessage(friendId, msg.id)}
+                                title={language === 'bn' ? 'মুছুন' : 'Unsend'}
+                                className="p-1 rounded-full text-slate-400 hover:text-rose-500 cursor-pointer"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+
                           <div
-                            className={`max-w-[78%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
+                            className={`max-w-[76%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
                               isMe
                                 ? 'bg-blue-600 text-white rounded-br-xs shadow-xs'
                                 : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200/70 dark:border-slate-700 rounded-bl-xs'
                             }`}
                           >
+                            {msg.replyTo && (
+                              <div
+                                className={`mb-1.5 px-2 py-1 rounded-lg border-l-2 text-[10px] ${
+                                  isMe
+                                    ? 'bg-blue-700/60 border-blue-200 text-blue-100'
+                                    : 'bg-slate-100 dark:bg-slate-700/70 border-blue-500 text-slate-600 dark:text-slate-300'
+                                }`}
+                              >
+                                <span className="font-bold block truncate">{msg.replyTo.senderName}</span>
+                                <span className="line-clamp-1 opacity-90">{msg.replyTo.text}</span>
+                              </div>
+                            )}
+
                             {msg.mediaUrl && (
                               <div className="mb-1.5 overflow-hidden rounded-xl">
                                 {/\.(mp4|webm|mov|m4v)(\?|$)/i.test(msg.mediaUrl) ||
@@ -586,6 +683,27 @@ export const MessengerDock: React.FC = () => {
                               )}
                             </div>
                           </div>
+                          {!isMe && (
+                            <div className="opacity-80 sm:opacity-0 sm:group-hover/msg:opacity-100 flex items-center gap-0.5 transition-opacity shrink-0">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setReplyingToMap((prev) => ({
+                                    ...prev,
+                                    [friendId]: {
+                                      id: msg.id,
+                                      text: msg.text || (msg.audioUrl ? '🎙️ Voice Note' : '📎 Attachment'),
+                                      senderName: friendName,
+                                    },
+                                  }))
+                                }
+                                title={language === 'bn' ? 'উত্তর দিন' : 'Reply'}
+                                className="p-1 rounded-full text-slate-400 hover:text-blue-500 cursor-pointer"
+                              >
+                                <Reply className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
                         </div>
 
                         {/* Seen Read Receipt Indicator underneath last outgoing message */}
@@ -642,6 +760,27 @@ export const MessengerDock: React.FC = () => {
                     }}
                   />
                 </div>
+
+                {/* Reply Quote Preview */}
+                {replyingToMap[friendId] && (
+                  <div className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/40 border-t border-blue-200 dark:border-blue-900 flex items-center justify-between gap-2 text-[11px]">
+                    <div className="min-w-0">
+                      <span className="font-bold text-blue-700 dark:text-blue-300 block truncate">
+                        {language === 'bn' ? 'উত্তর দিচ্ছেন:' : 'Replying to:'} {replyingToMap[friendId]?.senderName}
+                      </span>
+                      <span className="text-slate-600 dark:text-slate-300 truncate block">
+                        {replyingToMap[friendId]?.text}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReplyingToMap((prev) => ({ ...prev, [friendId]: null }))}
+                      className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
 
                 {/* Quick Emoji & Message Input */}
                 <div className="p-2 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shrink-0">

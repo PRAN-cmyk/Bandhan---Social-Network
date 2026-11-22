@@ -225,6 +225,42 @@ export const GamingView: React.FC = () => {
   const { currentUser, contacts, language, showToast } = useApp();
 
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [gameStats, setGameStats] = useState<{
+    ttt: number;
+    chess: number;
+    c4: number;
+    ludo: number;
+    memory: number;
+  }>(() => {
+    try {
+      const saved = localStorage.getItem('bandhan_game_scoreboard');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          ttt: parsed.ttt || 0,
+          chess: parsed.chess || 0,
+          c4: parsed.c4 || 0,
+          ludo: parsed.ludo || 0,
+          memory: parsed.memory || 0,
+        };
+      }
+    } catch {
+      // ignore
+    }
+    return { ttt: 0, chess: 0, c4: 0, ludo: 0, memory: 0 };
+  });
+
+  const recordGameWin = (gameKey: 'ttt' | 'chess' | 'c4' | 'ludo' | 'memory') => {
+    setGameStats((prev) => {
+      const next = { ...prev, [gameKey]: (prev[gameKey] || 0) + 1 };
+      try {
+        localStorage.setItem('bandhan_game_scoreboard', JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
 
   const playGameSound = (type: 'move' | 'capture' | 'win') => {
     if (!soundEnabled) return;
@@ -483,6 +519,7 @@ export const GamingView: React.FC = () => {
     if (res) {
       if (res.winner === 'X' || res.winner === 'O') {
         playGameSound('win');
+        if (res.winner === 'X') recordGameWin('ttt');
         setTttScore((prev) => ({ ...prev, [res.winner]: prev[res.winner as 'X' | 'O'] + 1 }));
       }
       return;
@@ -502,6 +539,7 @@ export const GamingView: React.FC = () => {
         const aiRes = checkTttWinner(aiBoard);
         if (aiRes && (aiRes.winner === 'X' || aiRes.winner === 'O')) {
           playGameSound('win');
+          if (aiRes.winner === 'X') recordGameWin('ttt');
           setTttScore((prev) => ({
             ...prev,
             [aiRes.winner]: prev[aiRes.winner as 'X' | 'O'] + 1,
@@ -602,6 +640,7 @@ export const GamingView: React.FC = () => {
     if (clickedPiece === '♚') {
       playGameSound('win');
       setChessWinner('white');
+      recordGameWin('chess');
       setAiCommentary(language === 'bn' ? '🎉 আপনি কিস্তিমাত করে জিতেছেন!' : '🎉 You won by Checkmate!');
       return;
     }
@@ -667,6 +706,7 @@ export const GamingView: React.FC = () => {
 
         if (allBlackMoves.length === 0) {
           setChessWinner('white');
+          recordGameWin('chess');
           return;
         }
 
@@ -788,6 +828,7 @@ export const GamingView: React.FC = () => {
     if (win) {
       playGameSound('win');
       setC4Winner(win);
+      if (win === 'R') recordGameWin('c4');
       return;
     }
 
@@ -935,6 +976,7 @@ export const GamingView: React.FC = () => {
     if (nextP >= 30) {
       playGameSound('win');
       setLudoWinner('player');
+      recordGameWin('ludo');
       setLudoRolling(false);
       setDailyCoins((c) => {
         const nextC = c + 100;
@@ -1096,7 +1138,9 @@ export const GamingView: React.FC = () => {
             const nextScore = { ...prev, player: prev.player + 1 };
             if (nextScore.player + nextScore.ai === 8) {
               playGameSound('win');
-              setMemoryWinner(nextScore.player > nextScore.ai ? 'player' : nextScore.player < nextScore.ai ? 'ai' : 'DRAW');
+              const outcome = nextScore.player > nextScore.ai ? 'player' : nextScore.player < nextScore.ai ? 'ai' : 'DRAW';
+              if (outcome === 'player') recordGameWin('memory');
+              setMemoryWinner(outcome);
             }
             return nextScore;
           });
@@ -1288,20 +1332,6 @@ export const GamingView: React.FC = () => {
     const text = chatDraft.trim();
     setLobbyChat((prev) => [...prev, { sender: currentUser.name.split(' ')[0], text }]);
     setChatDraft('');
-
-    setTimeout(() => {
-      const replies =
-        language === 'bn'
-          ? ['দারুণ চাল! 👏', 'দেখা যাক কে জেতে! 🔥', 'বুদ্ধিদীপ্ত খেলা হচ্ছে! 🏆']
-          : ['Great move! 👏', 'Good game! 🔥', 'Tactical match! 🏆'];
-      setLobbyChat((prev) => [
-        ...prev,
-        {
-          sender: activeLobbyRoom?.hostName.split(' ')[0] || 'Opponent',
-          text: replies[Math.floor(Math.random() * replies.length)],
-        },
-      ]);
-    }, 800);
   };
 
   return (
@@ -1383,55 +1413,92 @@ export const GamingView: React.FC = () => {
         </div>
       </div>
 
-      {/* Updated Game Zone Daily Rewards & Coin Wallet Bar */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center text-lg font-black">
-            🪙
+      {/* Updated Game Zone Daily Rewards, Scoreboard & Coin Wallet Bar */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center text-lg font-black">
+              🪙
+            </div>
+            <div>
+              <p className="text-xs font-extrabold text-slate-900 dark:text-slate-100">
+                {language === 'bn'
+                  ? `আপনার গেমিং কয়েন: ${dailyCoins.toLocaleString()} XP Coins`
+                  : `Your Gaming Wallet: ${dailyCoins.toLocaleString()} XP Coins`}
+              </p>
+              <p className="text-[11px] text-slate-500">
+                {language === 'bn'
+                  ? 'দাবা, কাটাকুটি, লুডু ডাইস ও স্নেক জিতে কয়েন ও স্কোর অর্জন করুন!'
+                  : 'Win matches in Chess, Ludo Dice, Connect 4 & Snake to earn coins & wins!'}
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-extrabold text-slate-900 dark:text-slate-100">
-              {language === 'bn'
-                ? `আপনার গেমিং কয়েন: ${dailyCoins.toLocaleString()} XP Coins`
-                : `Your Gaming Wallet: ${dailyCoins.toLocaleString()} XP Coins`}
-            </p>
-            <p className="text-[11px] text-slate-500">
-              {language === 'bn'
-                ? 'দাবা, কাটাকুটি, লুডু ডাইস ও স্নেক জিতে কয়েন অর্জন করুন!'
-                : 'Win matches in Chess, Ludo Dice, Connect 4 & Snake to earn coins!'}
-            </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSoundEnabled((s) => !s)}
+              className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              title={language === 'bn' ? 'সাউন্ড চালু/বন্ধ' : 'Toggle Game Sound'}
+            >
+              {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-emerald-500" /> : <VolumeX className="w-3.5 h-3.5 text-slate-400" />}
+              <span>{soundEnabled ? (language === 'bn' ? 'সাউন্ড চালু' : 'Sound On') : (language === 'bn' ? 'মিউট' : 'Muted')}</span>
+            </button>
+            <button
+              type="button"
+              disabled={claimedDailyBonus}
+              onClick={() => {
+                setClaimedDailyBonus(true);
+                setDailyCoins((c) => {
+                  const nextC = c + 250;
+                  localStorage.setItem('bandhan_game_coins', String(nextC));
+                  return nextC;
+                });
+                showToast(
+                  language === 'bn'
+                    ? '🎁 +২৫০ ডেইলি গেম বোনাস কয়েন যুক্ত হয়েছে!'
+                    : '🎁 Claimed +250 Daily Game Bonus Coins!',
+                );
+              }}
+              className={`px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors ${
+                claimedDailyBonus
+                  ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-default'
+                  : 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-xs'
+              }`}
+            >
+              {claimedDailyBonus
+                ? language === 'bn'
+                  ? '✓ আজকের বোনাস নেওয়া হয়েছে'
+                  : '✓ Daily Bonus Claimed'
+                : language === 'bn'
+                ? '🎁 +২৫০ ফ্রি বোনাস নিন'
+                : '🎁 Claim +250 Coins'}
+            </button>
           </div>
         </div>
-        <button
-          type="button"
-          disabled={claimedDailyBonus}
-          onClick={() => {
-            setClaimedDailyBonus(true);
-            setDailyCoins((c) => {
-              const nextC = c + 250;
-              localStorage.setItem('bandhan_game_coins', String(nextC));
-              return nextC;
-            });
-            showToast(
-              language === 'bn'
-                ? '🎁 +২৫০ ডেইলি গেম বোনাস কয়েন যুক্ত হয়েছে!'
-                : '🎁 Claimed +250 Daily Game Bonus Coins!',
-            );
-          }}
-          className={`px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors ${
-            claimedDailyBonus
-              ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-default'
-              : 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-xs'
-          }`}
-        >
-          {claimedDailyBonus
-            ? language === 'bn'
-              ? '✓ আজকের বোনাস নেওয়া হয়েছে'
-              : '✓ Daily Bonus Claimed'
-            : language === 'bn'
-            ? '🎁 +২৫০ ফ্রি বোনাস নিন'
-            : '🎁 Claim +250 Coins'}
-        </button>
+
+        {/* Persistent Multi-Game Win Scoreboard */}
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-center">
+          {[
+            { labelBn: 'দাবা জয়', labelEn: 'Chess', val: gameStats.chess },
+            { labelBn: 'কাটাকুটি', labelEn: 'TicTacToe', val: gameStats.ttt },
+            { labelBn: 'Connect 4', labelEn: 'Connect 4', val: gameStats.c4 },
+            { labelBn: 'লুডু জয়', labelEn: 'Ludo', val: gameStats.ludo },
+            { labelBn: 'মেমোরি', labelEn: 'Memory', val: gameStats.memory },
+            { labelBn: 'স্নেক বেস্ট', labelEn: 'Snake Hi', val: snakeHighScore },
+          ].map((stat) => (
+            <div
+              key={stat.labelEn}
+              className="px-2 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-100 dark:border-slate-800"
+            >
+              <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                {language === 'bn' ? stat.labelBn : stat.labelEn}
+              </p>
+              <p className="text-sm font-black text-indigo-600 dark:text-indigo-400">
+                {stat.val}
+              </p>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Featured Games Cards (5 Games) */}
@@ -2393,8 +2460,8 @@ export const GamingView: React.FC = () => {
             {/* Right Sidebar: Live Playroom Chat */}
             <div className="w-full lg:w-72 bg-slate-50 dark:bg-slate-950 border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-slate-800 flex flex-col h-60 lg:h-auto">
               <div className="p-3.5 border-b border-slate-200 dark:border-slate-800 font-bold text-xs text-slate-800 dark:text-slate-200 flex items-center justify-between">
-                <span>{language === 'bn' ? 'প্লে-রুম লাইভ চ্যাট' : 'Playroom Live Chat'}</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>{language === 'bn' ? 'প্লে-রুম নোট ও চ্যাট' : 'Playroom Match Chat'}</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
               </div>
 
               <div className="flex-1 p-3 overflow-y-auto space-y-2 text-xs">
@@ -2411,9 +2478,27 @@ export const GamingView: React.FC = () => {
                 ))}
               </div>
 
+              <div className="px-2.5 pt-2 flex items-center gap-1 overflow-x-auto no-scrollbar border-t border-slate-200/60 dark:border-slate-800">
+                {['GG! 🤝', 'Nice Move! 👏', 'Rematch! 🔥'].map((quickMsg) => (
+                  <button
+                    key={quickMsg}
+                    type="button"
+                    onClick={() =>
+                      setLobbyChat((prev) => [
+                        ...prev,
+                        { sender: currentUser.name.split(' ')[0], text: quickMsg },
+                      ])
+                    }
+                    className="shrink-0 px-2 py-0.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[10px] font-bold text-slate-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 cursor-pointer"
+                  >
+                    {quickMsg}
+                  </button>
+                ))}
+              </div>
+
               <form
                 onSubmit={handleSendLobbyChat}
-                className="p-2.5 border-t border-slate-200 dark:border-slate-800 flex items-center gap-1.5"
+                className="p-2.5 flex items-center gap-1.5"
               >
                 <input
                   type="text"

@@ -18,27 +18,10 @@ import {
   RotateCcw,
   RotateCw,
   FastForward,
+  Bookmark,
+  Search,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { sampleUsers } from '../data/mockData';
-import { PostComment } from '../types';
-
-const DEFAULT_REEL_COMMENTS: PostComment[] = [
-  {
-    id: 'rc_def_1',
-    author: sampleUsers.arafat,
-    content: 'অসাধারণ ভিডিও! দৃশ্য এবং মিউজিক দুটোই দারুণ হয়েছে 🔥👏',
-    createdAt: '15m ago',
-    likesCount: 14,
-  },
-  {
-    id: 'rc_def_2',
-    author: sampleUsers.nusrat,
-    content: 'মন ভালো করে দেওয়ার মতো একটি রিল! ❤️✨',
-    createdAt: '1h ago',
-    likesCount: 9,
-  },
-];
 
 export const ReelsView: React.FC = () => {
   const {
@@ -57,7 +40,37 @@ export const ReelsView: React.FC = () => {
   } = useApp();
 
   const [isMuted, setIsMuted] = useState(false);
-  const [viewMode, setViewMode] = useState<'watch' | 'trending' | 'insights'>('watch');
+  const [viewMode, setViewMode] = useState<'watch' | 'trending' | 'saved' | 'insights'>('watch');
+  const [reelSearchQuery, setReelSearchQuery] = useState('');
+  const [savedReelIds, setSavedReelIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('bandhan_saved_reels');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const toggleSaveReel = (reelId: string) => {
+    setSavedReelIds((prev) => {
+      const exists = prev.includes(reelId);
+      const next = exists ? prev.filter((id) => id !== reelId) : [...prev, reelId];
+      try {
+        localStorage.setItem('bandhan_saved_reels', JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      showToast(
+        exists
+          ? language === 'bn'
+            ? 'রিল সেভ তালিকা থেকে সরানো হয়েছে'
+            : 'Removed from Saved Reels'
+          : language === 'bn'
+          ? 'রিল সেভ করা হয়েছে!'
+          : 'Saved to your Reels!',
+      );
+      return next;
+    });
+  };
   const [activeReelIndex, setActiveReelIndex] = useState<number>(0);
   const [isManualPaused, setIsManualPaused] = useState<boolean>(false);
   const [openCommentsReelId, setOpenCommentsReelId] = useState<string | null>(null);
@@ -234,6 +247,20 @@ export const ReelsView: React.FC = () => {
             </button>
             <button
               type="button"
+              onClick={() => setViewMode('saved')}
+              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'saved'
+                  ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400'
+              }`}
+            >
+              <Bookmark className="w-3.5 h-3.5" />
+              <span>
+                {language === 'bn' ? `সেভড (${savedReelIds.length})` : `Saved (${savedReelIds.length})`}
+              </span>
+            </button>
+            <button
+              type="button"
               onClick={() => setViewMode('insights')}
               className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 viewMode === 'insights'
@@ -268,23 +295,35 @@ export const ReelsView: React.FC = () => {
         </div>
       </div>
 
-      {/* TRENDING REELS VIEW */}
-      {viewMode === 'trending' ? (
+      {/* TRENDING OR SAVED REELS VIEW */}
+      {viewMode === 'trending' || viewMode === 'saved' ? (
         <div className="space-y-4 px-1 animate-in fade-in duration-200">
           <div className="bg-gradient-to-r from-rose-600 via-pink-600 to-purple-600 text-white p-5 rounded-3xl shadow-xl">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-rose-200 bg-white/10 px-2.5 py-1 rounded-full mb-2">
-                  <TrendingUp className="w-3.5 h-3.5" />
-                  {language === 'bn' ? 'ট্রেন্ডিং ও জনপ্রিয় রিলস' : 'Trending & Popular Reels'}
+                  {viewMode === 'saved' ? <Bookmark className="w-3.5 h-3.5" /> : <TrendingUp className="w-3.5 h-3.5" />}
+                  {viewMode === 'saved'
+                    ? language === 'bn'
+                      ? 'আপনার সেভ করা রিলস'
+                      : 'Your Saved Reels'
+                    : language === 'bn'
+                    ? 'ট্রেন্ডিং ও জনপ্রিয় রিলস'
+                    : 'Trending & Popular Reels'}
                 </span>
                 <h3 className="text-lg font-extrabold">
-                  {language === 'bn' ? 'বর্তমানে ভাইরাল সকল শর্ট ভিডিও' : 'Viral Bangladeshi & Global Reels'}
+                  {viewMode === 'saved'
+                    ? language === 'bn'
+                      ? 'সংরক্ষিত প্রিয় শর্ট ভিডিওসমূহ'
+                      : 'Bookmarked Short Videos'
+                    : language === 'bn'
+                    ? 'বর্তমানে ভাইরাল সকল শর্ট ভিডিও'
+                    : 'Viral Bangladeshi & Global Reels'}
                 </h3>
                 <p className="text-xs text-rose-100 mt-1">
                   {language === 'bn'
-                    ? 'সবচেয়ে বেশি দেখা এবং পছন্দ করা রিলগুলো এক নজরে এক্সপ্লোর করুন।'
-                    : 'Explore the most-watched and loved short video reels in one place.'}
+                    ? 'শিরোনাম, অডিও বা নির্মাতার নাম দিয়ে রিল খুঁজুন ও এক ট্যাপে দেখুন।'
+                    : 'Search reels by caption, song, or creator and tap to watch.'}
                 </p>
               </div>
               <button
@@ -297,73 +336,122 @@ export const ReelsView: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {reels.map((reel, idx) => (
-              <div
-                key={reel.id}
-                onClick={() => {
-                  setActiveReelIndex(idx);
-                  setViewMode('watch');
-                  setIsManualPaused(false);
-                }}
-                className="group relative aspect-[9/14] rounded-2xl overflow-hidden bg-slate-900 shadow-md cursor-pointer hover:ring-2 hover:ring-rose-500 transition-all"
-              >
-                {reel.videoUrl ? (
-                  <video
-                    src={reel.videoUrl}
-                    poster={reel.posterUrl}
-                    muted
-                    playsInline
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                ) : (
-                  <img
-                    src={reel.posterUrl}
-                    alt={reel.description}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-between p-2.5 text-white">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-600/90 flex items-center gap-1 shadow-xs">
-                      🔥 #{idx + 1}
-                    </span>
-                    <span className="text-[10px] font-semibold flex items-center gap-1 bg-black/50 px-1.5 py-0.5 rounded-full">
-                      <Eye className="w-3 h-3" />
-                      {(reel.viewsCount || 0).toLocaleString()}
-                    </span>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <img
-                        src={reel.author.avatar}
-                        alt={reel.author.name}
-                        referrerPolicy="no-referrer"
-                        className="w-5 h-5 rounded-full object-cover border border-white/50"
-                      />
-                      <span className="text-xs font-bold truncate">
-                        {language === 'bn' ? reel.author.nameBn || reel.author.name : reel.author.name}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-white/90 line-clamp-1 leading-snug">
-                      {reel.description}
-                    </p>
-                    <div className="flex items-center gap-3 mt-1 text-[10px] text-rose-300 font-bold">
-                      <span className="flex items-center gap-1">
-                        <Heart className="w-3 h-3 fill-current" />
-                        {reel.likesCount.toLocaleString()}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <MessageCircle className="w-3 h-3" />
-                        {(reel.commentsCount || reel.comments?.length || 0).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={reelSearchQuery}
+              onChange={(e) => setReelSearchQuery(e.target.value)}
+              placeholder={
+                language === 'bn'
+                  ? 'ক্যাপশন, গান বা নির্মাতার নাম দিয়ে রিল খুঁজুন...'
+                  : 'Search reels by caption, song, or creator...'
+              }
+              className="w-full pl-9 pr-4 py-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-rose-500/30"
+            />
           </div>
+
+          {(() => {
+            const q = reelSearchQuery.trim().toLowerCase();
+            const list = reels.filter((r) => {
+              if (viewMode === 'saved' && !savedReelIds.includes(r.id)) return false;
+              if (!q) return true;
+              return (
+                (r.description || '').toLowerCase().includes(q) ||
+                (r.songTitle || '').toLowerCase().includes(q) ||
+                (r.author?.name || '').toLowerCase().includes(q)
+              );
+            });
+
+            if (list.length === 0) {
+              return (
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 text-center">
+                  <p className="text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400">
+                    {viewMode === 'saved'
+                      ? language === 'bn'
+                        ? 'আপনি এখনো কোনো রিল সেভ করেননি।'
+                        : 'No saved reels yet. Tap the bookmark icon on any reel to save it.'
+                      : language === 'bn'
+                      ? 'আপনার সার্চের সাথে কোনো রিল মেলেনি।'
+                      : 'No reels match your search.'}
+                  </p>
+                </div>
+              );
+            }
+
+            return (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {list.map((reel, idx) => {
+                  const fullIdx = reels.findIndex((r) => r.id === reel.id);
+                  return (
+                    <div
+                      key={reel.id}
+                      onClick={() => {
+                        setActiveReelIndex(fullIdx >= 0 ? fullIdx : 0);
+                        setViewMode('watch');
+                        setIsManualPaused(false);
+                      }}
+                      className="group relative aspect-[9/14] rounded-2xl overflow-hidden bg-slate-900 shadow-md cursor-pointer hover:ring-2 hover:ring-rose-500 transition-all"
+                    >
+                      {reel.videoUrl ? (
+                        <video
+                          src={reel.videoUrl}
+                          poster={reel.posterUrl}
+                          muted
+                          playsInline
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <img
+                          src={reel.posterUrl}
+                          alt={reel.description}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-between p-2.5 text-white">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-600/90 flex items-center gap-1 shadow-xs">
+                            {viewMode === 'saved' ? '🔖' : '🔥'} #{idx + 1}
+                          </span>
+                          <span className="text-[10px] font-semibold flex items-center gap-1 bg-black/50 px-1.5 py-0.5 rounded-full">
+                            <Eye className="w-3 h-3" />
+                            {(reel.viewsCount || 0).toLocaleString()}
+                          </span>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <img
+                              src={reel.author.avatar}
+                              alt={reel.author.name}
+                              referrerPolicy="no-referrer"
+                              className="w-5 h-5 rounded-full object-cover border border-white/50"
+                            />
+                            <span className="text-xs font-bold truncate">
+                              {language === 'bn' ? reel.author.nameBn || reel.author.name : reel.author.name}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-white/90 line-clamp-1 leading-snug">
+                            {reel.description}
+                          </p>
+                          <div className="flex items-center gap-3 mt-1 text-[10px] text-rose-300 font-bold">
+                            <span className="flex items-center gap-1">
+                              <Heart className="w-3 h-3 fill-current" />
+                              {reel.likesCount.toLocaleString()}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <MessageCircle className="w-3 h-3" />
+                              {(reel.commentsCount || reel.comments?.length || 0).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       ) : viewMode === 'insights' ? (
         <div className="space-y-5 px-1 animate-in fade-in duration-200">
@@ -520,7 +608,7 @@ export const ReelsView: React.FC = () => {
           {/* Active Reel Control Strip */}
           <div className="flex items-center justify-between bg-slate-900 text-white px-4 py-2.5 rounded-2xl shadow-md">
             <div className="flex items-center gap-2 text-xs font-bold">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
               <span>
                 {language === 'bn'
                   ? `একবারে ১টি ভিডিও চলছে (রিল ${activeReelIndex + 1} / ${reels.length})`
@@ -558,13 +646,11 @@ export const ReelsView: React.FC = () => {
           </div>
 
           {reels.map((reel, idx) => {
-            const reelComments =
-              reel.comments && reel.comments.length > 0
-                ? [...reel.comments, ...DEFAULT_REEL_COMMENTS]
-                : DEFAULT_REEL_COMMENTS;
+            const reelComments = reel.comments || [];
             const isCommentsOpen = openCommentsReelId === reel.id;
             const isCurrentActive = idx === activeReelIndex;
             const isCurrentlyPlaying = isCurrentActive && !isManualPaused;
+            const isReelSaved = savedReelIds.includes(reel.id);
 
             return (
               <div
@@ -578,6 +664,19 @@ export const ReelsView: React.FC = () => {
                     setActiveReelIndex(idx);
                     setIsManualPaused(false);
                   }
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  const isAlreadyLiked = Array.isArray(reel.likedUserIds)
+                    ? reel.likedUserIds.includes(currentUser.id)
+                    : Boolean(reel.isLiked && reel.author.id === currentUser.id);
+                  if (!isAlreadyLiked) {
+                    toggleLikeReel(reel.id);
+                  }
+                  setShowHeartBurst((prev) => ({ ...prev, [reel.id]: true }));
+                  setTimeout(() => {
+                    setShowHeartBurst((prev) => ({ ...prev, [reel.id]: false }));
+                  }, 750);
                 }}
                 className={`relative w-full aspect-[9/14] sm:aspect-[9/13] max-h-[720px] bg-black rounded-3xl overflow-hidden shadow-2xl flex flex-col justify-between transition-all ${
                   isCurrentActive
@@ -775,6 +874,15 @@ export const ReelsView: React.FC = () => {
                   </div>
                 )}
 
+                {/* Center Double-Tap Heart Burst Animation */}
+                {showHeartBurst[reel.id] && (
+                  <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center animate-in zoom-in-75 fade-in duration-200">
+                    <div className="w-20 h-20 rounded-full bg-rose-500/25 backdrop-blur-sm flex items-center justify-center shadow-2xl">
+                      <Heart className="w-12 h-12 text-rose-500 fill-rose-500 drop-shadow-2xl" />
+                    </div>
+                  </div>
+                )}
+
                 {/* Floating Right Actions Dock */}
                 <div className="absolute right-3 bottom-28 z-20 flex flex-col items-center gap-4">
                   {/* Like Reel with Quick Emoji Reaction Popover */}
@@ -876,7 +984,8 @@ export const ReelsView: React.FC = () => {
                     type="button"
                     onClick={() => {
                       incrementReelShares(reel.id);
-                      navigator.clipboard?.writeText?.(window.location.href);
+                      const shareUrl = `${window.location.origin}${window.location.pathname}#reel=${reel.id}`;
+                      navigator.clipboard?.writeText?.(shareUrl);
                       showToast(t.linkCopied);
                     }}
                     className="flex flex-col items-center group cursor-pointer"
@@ -886,6 +995,34 @@ export const ReelsView: React.FC = () => {
                     </div>
                     <span className="text-xs font-bold text-white mt-1 drop-shadow">
                       {reel.sharesCount.toLocaleString()}
+                    </span>
+                  </button>
+
+                  {/* Save / Bookmark Reel */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleSaveReel(reel.id);
+                    }}
+                    className="flex flex-col items-center group cursor-pointer"
+                    title={language === 'bn' ? 'রিল সেভ করুন' : 'Save Reel'}
+                  >
+                    <div
+                      className={`w-11 h-11 rounded-full backdrop-blur-md flex items-center justify-center group-hover:scale-110 transition-transform ${
+                        isReelSaved ? 'bg-amber-500 text-white' : 'bg-black/50 text-white'
+                      }`}
+                    >
+                      <Bookmark className={`w-5 h-5 ${isReelSaved ? 'fill-current' : ''}`} />
+                    </div>
+                    <span className="text-[11px] font-bold text-white mt-1 drop-shadow">
+                      {isReelSaved
+                        ? language === 'bn'
+                          ? 'সেভড'
+                          : 'Saved'
+                        : language === 'bn'
+                        ? 'সেভ'
+                        : 'Save'}
                     </span>
                   </button>
                 </div>
@@ -1020,27 +1157,38 @@ export const ReelsView: React.FC = () => {
 
                     {/* Comments List */}
                     <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                      {reelComments.map((c) => (
-                        <div key={c.id} className="flex items-start gap-2.5">
-                          <img
-                            src={c.author.avatar}
-                            alt={c.author.name}
-                            referrerPolicy="no-referrer"
-                            className="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5"
-                          />
-                          <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-2xl px-3.5 py-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                                {language === 'bn' ? c.author.nameBn || c.author.name : c.author.name}
-                              </span>
-                              <span className="text-[10px] text-slate-400">{c.createdAt}</span>
-                            </div>
-                            <p className="text-xs text-slate-700 dark:text-slate-200 mt-0.5 leading-relaxed">
-                              {c.content}
-                            </p>
-                          </div>
+                      {reelComments.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-center py-8 text-slate-400">
+                          <MessageCircle className="w-8 h-8 mb-2 opacity-40" />
+                          <p className="text-xs font-semibold">
+                            {language === 'bn'
+                              ? 'এখনো কোনো কমেন্ট নেই — প্রথম কমেন্টটি আপনিই করুন!'
+                              : 'No comments yet — be the first to comment!'}
+                          </p>
                         </div>
-                      ))}
+                      ) : (
+                        reelComments.map((c) => (
+                          <div key={c.id} className="flex items-start gap-2.5">
+                            <img
+                              src={c.author.avatar}
+                              alt={c.author.name}
+                              referrerPolicy="no-referrer"
+                              className="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5"
+                            />
+                            <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-2xl px-3.5 py-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                                  {language === 'bn' ? c.author.nameBn || c.author.name : c.author.name}
+                                </span>
+                                <span className="text-[10px] text-slate-400">{c.createdAt}</span>
+                              </div>
+                              <p className="text-xs text-slate-700 dark:text-slate-200 mt-0.5 leading-relaxed">
+                                {c.content}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </div>
 
                     {/* Quick Reaction Comment Chips */}

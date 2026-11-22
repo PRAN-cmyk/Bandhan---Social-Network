@@ -238,6 +238,11 @@ export const googleSignIn = async (
     let friendlyMessage = 'Google login failed. Please select your Google account.';
     if (error?.code === 'auth/popup-closed-by-user') {
       friendlyMessage = 'Sign-in window closed. Please click continue with Google again.';
+    } else if (error?.code === 'auth/unauthorized-domain') {
+      const host = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+      friendlyMessage = `Domain "${host}" is not authorized in Firebase Authentication. Add "${host}" under Firebase Console → Authentication → Settings → Authorized domains.`;
+    } else if (error?.code === 'auth/operation-not-allowed') {
+      friendlyMessage = 'Google Sign-In is disabled in Firebase Console. Enable it under Authentication → Sign-in method.';
     } else if (error?.code === 'auth/network-request-failed') {
       friendlyMessage = 'Network error. Please check your internet connection.';
     } else if (error?.code === 'auth/account-exists-with-different-credential') {
@@ -249,31 +254,67 @@ export const googleSignIn = async (
   }
 };
 
+const mapFirebaseEmailAuthError = (error: any, fallback: string): Error => {
+  const code = error?.code || '';
+  let msg = fallback;
+  if (code === 'auth/email-already-in-use') {
+    msg = 'This email is already registered. Please log in instead.';
+  } else if (code === 'auth/weak-password') {
+    msg = 'Password is too weak. Please enter at least 6 characters.';
+  } else if (code === 'auth/invalid-email') {
+    msg = 'Please enter a valid email address.';
+  } else if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
+    msg = 'Incorrect email or password. Please check your credentials.';
+  } else if (code === 'auth/too-many-requests') {
+    msg = 'Too many failed attempts. Please wait a moment before trying again.';
+  } else if (code === 'auth/unauthorized-domain') {
+    const host = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+    msg = `Domain "${host}" is not authorized in Firebase Auth Authorized Domains.`;
+  } else if (code === 'auth/operation-not-allowed') {
+    msg = 'Email/Password sign-in is not enabled in Firebase Authentication settings.';
+  }
+  const err = new Error(msg);
+  (err as any).code = code;
+  return err;
+};
+
 export const firebaseRegisterWithEmailPassword = async (
   email: string,
   pass: string,
   displayName: string,
   nameBn?: string,
 ): Promise<FirebaseUser> => {
-  const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
-  if (displayName.trim()) {
-    await updateProfile(cred.user, { displayName: displayName.trim() });
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
+    if (displayName.trim()) {
+      await updateProfile(cred.user, { displayName: displayName.trim() });
+    }
+    await syncFirebaseUserProfile(cred.user, nameBn);
+    return cred.user;
+  } catch (error: any) {
+    throw mapFirebaseEmailAuthError(error, 'Account creation failed. Please try again.');
   }
-  await syncFirebaseUserProfile(cred.user, nameBn);
-  return cred.user;
 };
 
 export const firebaseLoginWithEmailPassword = async (
   email: string,
   pass: string,
 ): Promise<FirebaseUser> => {
-  const cred = await signInWithEmailAndPassword(auth, email.trim(), pass);
-  await syncFirebaseUserProfile(cred.user);
-  return cred.user;
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email.trim(), pass);
+    await syncFirebaseUserProfile(cred.user);
+    return cred.user;
+  } catch (error: any) {
+    throw mapFirebaseEmailAuthError(error, 'Email login failed. Please check your credentials.');
+  }
 };
 
 export const firebaseSendPasswordResetEmail = async (email: string): Promise<void> => {
-  await sendPasswordResetEmail(auth, email.trim());
+  try {
+    await sendPasswordResetEmail(auth, email.trim());
+  } catch (error: any) {
+    throw mapFirebaseEmailAuthError(error, 'Failed to send password reset email.');
+  }
 };
 
 export const getAccessToken = async (): Promise<string | null> => {

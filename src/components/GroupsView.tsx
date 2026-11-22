@@ -22,12 +22,15 @@ import {
   MicOff,
   VideoOff,
   PhoneCall,
+  Search,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PostCard } from './PostCard';
 import { CreatePostBox } from './CreatePostBox';
 import { LiveStreamModal } from './LiveStreamModal';
 import { fileToDataUrl } from '../utils/storage';
+import { createAvatarUrl } from '../data/mockData';
+import coverSkylineImg from '../assets/images/profile_cover_skyline_1790115270776.jpg';
 
 export const GroupsView: React.FC = () => {
   const {
@@ -72,14 +75,18 @@ export const GroupsView: React.FC = () => {
   // Group Chat input inside group
   const [inlineGroupChatInput, setInlineGroupChatInput] = useState('');
 
-  // Create Page modal state
+  // Create Page & Detail view state
   const [isCreatePageOpen, setIsCreatePageOpen] = useState(false);
   const [newPageName, setNewPageName] = useState('');
   const [newPageCategory, setNewPageCategory] = useState('Official Brand / Creator');
   const [newPageDescription, setNewPageDescription] = useState('');
   const [newPageCover, setNewPageCover] = useState('');
+  const [newPageAvatar, setNewPageAvatar] = useState('');
   const [selectedPageForPost, setSelectedPageForPost] = useState<string>('');
   const [pagePostText, setPagePostText] = useState('');
+  const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
+  const [pageSearchQuery, setPageSearchQuery] = useState('');
+  const [pageCategoryFilter, setPageCategoryFilter] = useState<string>('all');
 
   // Google Chat & Video Hub (Privacy Protected) state
   const [isGoogleVideoLive, setIsGoogleVideoLive] = useState(false);
@@ -93,14 +100,14 @@ export const GroupsView: React.FC = () => {
     {
       id: 'gc_1',
       sender: 'Arafat Hossain',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+      avatar: createAvatarUrl('Arafat Hossain', '#059669', '#ffffff'),
       text: 'গুগল চ্যাট ও ভিডিও রুমে সবাইকে স্বাগতম! আমাদের কথোপকথন এন্ড-টু-এন্ড প্রাইভেসি দ্বারা সুরক্ষিত 🔒',
       time: '10:30 AM',
     },
     {
       id: 'gc_2',
       sender: 'Nusrat Jahan',
-      avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&auto=format&fit=crop&q=80',
+      avatar: createAvatarUrl('Nusrat Jahan', '#7c3aed', '#ffffff'),
       text: 'অসাধারণ! ভিডিও মিটিং কোড দিয়ে সরাসরি জয়েন করা যাচ্ছে 🎥✨',
       time: '10:32 AM',
     },
@@ -226,7 +233,7 @@ export const GroupsView: React.FC = () => {
         newGroupCover ||
         currentUser.coverImage ||
         groups[0]?.coverImage ||
-        'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1000&auto=format&fit=crop&q=80',
+        coverSkylineImg,
       description:
         newGroupDescription.trim() ||
         (language === 'bn'
@@ -963,166 +970,375 @@ export const GroupsView: React.FC = () => {
       {/* ===================================================================== */}
       {/* OFFICIAL PAGES HUB (পেইজ অপশন)                                         */}
       {/* ===================================================================== */}
-      {directoryFilter === 'pages' && (
-        <div className="space-y-4 animate-in fade-in duration-200">
-          <div className="bg-gradient-to-r from-indigo-700 via-blue-700 to-slate-900 rounded-2xl p-5 text-white shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 text-[11px] font-bold mb-1.5">
-                <Flag className="w-3.5 h-3.5 text-amber-300" />
-                {language === 'bn' ? 'অফিসিয়াল পেইজ ও ব্র্যান্ড হাব' : 'Official Pages & Creator Hub'}
-              </span>
-              <h3 className="text-lg font-extrabold">
-                {language === 'bn'
-                  ? 'পেইজ ফলো করুন, নতুন পেইজ খুলুন এবং পেইজ থেকে পোস্ট করুন'
-                  : 'Follow Official Pages, Create Your Page & Publish Posts'}
-              </h3>
-              <p className="text-xs text-indigo-100 mt-0.5">
-                {language === 'bn'
-                  ? 'আপনার ব্যবসা, ক্রিয়েটর ব্র্যান্ড বা কমিউনিটির জন্য ভেরিফাইড পেইজ পরিচালনা করুন।'
-                  : 'Manage verified pages for your brand, creator channel, or community.'}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsCreatePageOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-white text-indigo-900 hover:bg-indigo-50 text-xs font-extrabold flex items-center gap-1.5 shrink-0 cursor-pointer shadow-md"
-            >
-              <Plus className="w-4 h-4" />
-              <span>{language === 'bn' ? 'নতুন পেইজ খুলুন' : 'Create New Page'}</span>
-            </button>
-          </div>
+      {directoryFilter === 'pages' && (() => {
+        const activePage = selectedPageId ? pages.find((pg) => pg.id === selectedPageId) : null;
 
-          {/* Quick Publish Post as a Page */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-            <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-              <Flag className="w-4 h-4 text-indigo-600" />
-              <span>
-                {language === 'bn'
-                  ? 'পেইজ থেকে সরাসরি নিউজফিডে পোস্ট প্রকাশ করুন'
-                  : 'Publish a Post Directly from an Official Page'}
-              </span>
-            </h4>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!pagePostText.trim()) return;
-                const chosenPage =
-                  pages.find((pg) => pg.id === selectedPageForPost) || pages[0];
-                addPost({
-                  content: `📢 [${
-                    language === 'bn'
-                      ? chosenPage?.nameBn || chosenPage?.name || 'Official Page'
-                      : chosenPage?.name || 'Official Page'
-                  }] ${pagePostText.trim()}`,
-                  privacy: 'public',
-                });
-                setPagePostText('');
-              }}
-              className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
-            >
-              <select
-                value={selectedPageForPost || pages[0]?.id || ''}
-                onChange={(e) => setSelectedPageForPost(e.target.value)}
-                className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700"
-              >
-                {pages.map((pg) => (
-                  <option key={pg.id} value={pg.id}>
-                    🚩 {language === 'bn' ? pg.nameBn || pg.name : pg.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="text"
-                value={pagePostText}
-                onChange={(e) => setPagePostText(e.target.value)}
-                placeholder={
-                  language === 'bn'
-                    ? 'পেইজের ঘোষণা বা নতুন আপডেট লিখুন...'
-                    : 'Write an update from this page...'
-                }
-                className="flex-1 px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
-              />
+        if (activePage) {
+          const activePageName = language === 'bn' ? activePage.nameBn || activePage.name : activePage.name;
+          const activePagePosts = posts.filter(
+            (p) => p.pageId === activePage.id || (p.content && p.content.includes(`[${activePageName}]`)),
+          );
+          return (
+            <div className="space-y-4 animate-in fade-in duration-200">
               <button
-                type="submit"
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer shrink-0"
+                type="button"
+                onClick={() => setSelectedPageId(null)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
               >
-                {language === 'bn' ? 'পেইজ পোস্ট করুন' : 'Post as Page'}
+                <ArrowLeft className="w-4 h-4" />
+                <span>{language === 'bn' ? 'সব পেইজে ফিরে যান' : 'Back to All Pages'}</span>
               </button>
-            </form>
-          </div>
 
-          {/* Pages Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {pages.map((pg) => (
-              <div
-                key={pg.id}
-                className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs flex flex-col justify-between"
-              >
-                <div>
-                  <div className="h-32 bg-slate-200 dark:bg-slate-800 relative">
-                    <img
-                      src={pg.coverImage}
-                      alt={pg.name}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover"
-                    />
-                    <span className="absolute top-2.5 right-2.5 px-2.5 py-0.5 rounded-full bg-black/65 text-white text-[10px] font-bold">
-                      {pg.category}
-                    </span>
-                  </div>
-                  <div className="p-4">
-                    <div className="flex items-center gap-3 -mt-9 mb-2 relative z-10">
-                      <img
-                        src={pg.avatar}
-                        alt={pg.name}
-                        referrerPolicy="no-referrer"
-                        className="w-14 h-14 rounded-2xl border-3 border-white dark:border-slate-900 object-cover bg-white shadow-md"
-                      />
-                      <div className="pt-5">
-                        <h4 className="font-bold text-base text-slate-900 dark:text-slate-100 flex items-center gap-1">
-                          <span>{language === 'bn' ? pg.nameBn || pg.name : pg.name}</span>
-                          {pg.isVerified && <span className="text-blue-500 text-xs">✓</span>}
-                        </h4>
-                        <p className="text-[11px] text-slate-500">
-                          {pg.followersCount.toLocaleString()}{' '}
-                          {language === 'bn' ? 'জন ফলোয়ার' : 'followers'}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
-                      {pg.description}
-                    </p>
-                  </div>
+              <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+                <div className="h-44 sm:h-52 bg-slate-200 dark:bg-slate-800 relative">
+                  <img
+                    src={activePage.coverImage || coverSkylineImg}
+                    alt={activePage.name}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover"
+                  />
+                  <span className="absolute top-3 right-3 px-3 py-1 rounded-full bg-black/65 text-white text-xs font-bold backdrop-blur-sm">
+                    {activePage.category}
+                  </span>
                 </div>
-
-                <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                <div className="p-5 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                  <div className="flex items-end gap-4 -mt-12 sm:-mt-14 relative z-10">
+                    <img
+                      src={activePage.avatar || createAvatarUrl(activePage.name, '#4f46e5', '#ffffff')}
+                      alt={activePage.name}
+                      referrerPolicy="no-referrer"
+                      className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl border-4 border-white dark:border-slate-900 object-cover bg-white shadow-lg"
+                    />
+                    <div className="pt-8">
+                      <h3 className="text-xl font-black text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                        <span>{activePageName}</span>
+                        {activePage.isVerified && (
+                          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 text-white text-[11px] font-bold">
+                            ✓
+                          </span>
+                        )}
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        {activePage.followersCount.toLocaleString()}{' '}
+                        {language === 'bn' ? 'জন ফলোয়ার' : 'followers'} · {activePagePosts.length}{' '}
+                        {language === 'bn' ? 'টি পোস্ট' : 'posts'}
+                      </p>
+                    </div>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => toggleFollowPage(pg.id)}
-                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
-                      pg.isFollowed
+                    onClick={() => toggleFollowPage(activePage.id)}
+                    className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                      activePage.isFollowed
                         ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
                         : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                     }`}
                   >
-                    {pg.isFollowed ? (
+                    {activePage.isFollowed ? (
                       <>
-                        <Check className="w-3.5 h-3.5" />
-                        <span>{language === 'bn' ? 'ফলো করছেন (Following)' : 'Following Page'}</span>
+                        <Check className="w-4 h-4" />
+                        <span>{language === 'bn' ? 'ফলো করছেন' : 'Following Page'}</span>
                       </>
                     ) : (
                       <>
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>{language === 'bn' ? '+ পেইজ ফলো করুন' : '+ Follow Page'}</span>
+                        <Plus className="w-4 h-4" />
+                        <span>{language === 'bn' ? 'পেইজ ফলো করুন' : 'Follow Page'}</span>
                       </>
                     )}
                   </button>
                 </div>
+                <div className="px-5 pb-5">
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
+                    {activePage.description}
+                  </p>
+                </div>
               </div>
-            ))}
+
+              {/* Post directly inside this Page */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!pagePostText.trim()) return;
+                  addPost({
+                    content: `📢 [${activePageName}] ${pagePostText.trim()}`,
+                    privacy: 'public',
+                    pageId: activePage.id,
+                    pageName: activePageName,
+                  });
+                  setPagePostText('');
+                }}
+                className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-2"
+              >
+                <img
+                  src={activePage.avatar || createAvatarUrl(activePage.name, '#4f46e5', '#ffffff')}
+                  alt={activePage.name}
+                  className="w-9 h-9 rounded-xl object-cover shrink-0"
+                />
+                <input
+                  type="text"
+                  value={pagePostText}
+                  onChange={(e) => setPagePostText(e.target.value)}
+                  placeholder={
+                    language === 'bn'
+                      ? `${activePageName}-এর পক্ষ থেকে নতুন আপডেট লিখুন...`
+                      : `Write a new update as ${activePageName}...`
+                  }
+                  className="flex-1 px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-slate-100"
+                />
+                <button
+                  type="submit"
+                  disabled={!pagePostText.trim()}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-bold cursor-pointer shrink-0"
+                >
+                  {language === 'bn' ? 'পোস্ট করুন' : 'Publish'}
+                </button>
+              </form>
+
+              {activePagePosts.length === 0 ? (
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 text-center">
+                  <p className="text-xs sm:text-sm font-semibold text-slate-500">
+                    {language === 'bn'
+                      ? 'এই পেইজে এখনো কোনো পোস্ট প্রকাশিত হয়নি।'
+                      : 'No posts published on this page yet.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {activePagePosts.map((post) => (
+                    <PostCard key={post.id} post={post} />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        const uniqueCategories = Array.from(new Set(pages.map((pg) => pg.category).filter(Boolean)));
+        const filteredPages = pages.filter((pg) => {
+          const matchesCategory = pageCategoryFilter === 'all' || pg.category === pageCategoryFilter;
+          const q = pageSearchQuery.trim().toLowerCase();
+          const matchesQuery =
+            !q ||
+            pg.name.toLowerCase().includes(q) ||
+            (pg.nameBn || '').toLowerCase().includes(q) ||
+            (pg.description || '').toLowerCase().includes(q);
+          return matchesCategory && matchesQuery;
+        });
+
+        return (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            <div className="bg-gradient-to-r from-indigo-700 via-blue-700 to-slate-900 rounded-2xl p-5 text-white shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 text-[11px] font-bold mb-1.5">
+                  <Flag className="w-3.5 h-3.5 text-amber-300" />
+                  {language === 'bn' ? 'অফিসিয়াল পেইজ ও ব্র্যান্ড হাব' : 'Official Pages & Creator Hub'}
+                </span>
+                <h3 className="text-lg font-extrabold">
+                  {language === 'bn'
+                    ? 'পেইজ ফলো করুন, নতুন পেইজ খুলুন এবং পেইজ থেকে পোস্ট করুন'
+                    : 'Follow Official Pages, Create Your Page & Publish Posts'}
+                </h3>
+                <p className="text-xs text-indigo-100 mt-0.5">
+                  {language === 'bn'
+                    ? 'আপনার ব্যবসা, ক্রিয়েটর ব্র্যান্ড বা কমিউনিটির জন্য ভেরিফাইড পেইজ পরিচালনা করুন।'
+                    : 'Manage verified pages for your brand, creator channel, or community.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreatePageOpen(true)}
+                className="px-4 py-2.5 rounded-xl bg-white text-indigo-900 hover:bg-indigo-50 text-xs font-extrabold flex items-center gap-1.5 shrink-0 cursor-pointer shadow-md"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{language === 'bn' ? 'নতুন পেইজ খুলুন' : 'Create New Page'}</span>
+              </button>
+            </div>
+
+            {/* Search & Category Filters */}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl p-3 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={pageSearchQuery}
+                  onChange={(e) => setPageSearchQuery(e.target.value)}
+                  placeholder={language === 'bn' ? 'পেইজ খুঁজুন...' : 'Search official pages...'}
+                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
+                />
+              </div>
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                <button
+                  type="button"
+                  onClick={() => setPageCategoryFilter('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 cursor-pointer ${
+                    pageCategoryFilter === 'all'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                  }`}
+                >
+                  {language === 'bn' ? 'সবগুলো' : 'All'}
+                </button>
+                {uniqueCategories.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setPageCategoryFilter(cat)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 cursor-pointer ${
+                      pageCategoryFilter === cat
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Quick Publish Post as a Page */}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+              <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <Flag className="w-4 h-4 text-indigo-600" />
+                <span>
+                  {language === 'bn'
+                    ? 'পেইজ থেকে সরাসরি নিউজফিডে পোস্ট প্রকাশ করুন'
+                    : 'Publish a Post Directly from an Official Page'}
+                </span>
+              </h4>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!pagePostText.trim()) return;
+                  const chosenPage =
+                    pages.find((pg) => pg.id === selectedPageForPost) || pages[0];
+                  const pageDisplayName =
+                    language === 'bn'
+                      ? chosenPage?.nameBn || chosenPage?.name || 'Official Page'
+                      : chosenPage?.name || 'Official Page';
+                  addPost({
+                    content: `📢 [${pageDisplayName}] ${pagePostText.trim()}`,
+                    privacy: 'public',
+                    pageId: chosenPage?.id,
+                    pageName: pageDisplayName,
+                  });
+                  setPagePostText('');
+                }}
+                className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
+              >
+                <select
+                  value={selectedPageForPost || pages[0]?.id || ''}
+                  onChange={(e) => setSelectedPageForPost(e.target.value)}
+                  className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700"
+                >
+                  {pages.map((pg) => (
+                    <option key={pg.id} value={pg.id}>
+                      🚩 {language === 'bn' ? pg.nameBn || pg.name : pg.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={pagePostText}
+                  onChange={(e) => setPagePostText(e.target.value)}
+                  placeholder={
+                    language === 'bn'
+                      ? 'পেইজের ঘোষণা বা নতুন আপডেট লিখুন...'
+                      : 'Write an update from this page...'
+                  }
+                  className="flex-1 px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer shrink-0"
+                >
+                  {language === 'bn' ? 'পেইজ পোস্ট করুন' : 'Post as Page'}
+                </button>
+              </form>
+            </div>
+
+            {/* Pages Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredPages.map((pg) => (
+                <div
+                  key={pg.id}
+                  className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs flex flex-col justify-between"
+                >
+                  <div
+                    onClick={() => setSelectedPageId(pg.id)}
+                    className="cursor-pointer group"
+                  >
+                    <div className="h-32 bg-slate-200 dark:bg-slate-800 relative overflow-hidden">
+                      <img
+                        src={pg.coverImage || coverSkylineImg}
+                        alt={pg.name}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                      <span className="absolute top-2.5 right-2.5 px-2.5 py-0.5 rounded-full bg-black/65 text-white text-[10px] font-bold">
+                        {pg.category}
+                      </span>
+                    </div>
+                    <div className="p-4">
+                      <div className="flex items-center gap-3 -mt-9 mb-2 relative z-10">
+                        <img
+                          src={pg.avatar || createAvatarUrl(pg.name, '#4f46e5', '#ffffff')}
+                          alt={pg.name}
+                          referrerPolicy="no-referrer"
+                          className="w-14 h-14 rounded-2xl border-3 border-white dark:border-slate-900 object-cover bg-white shadow-md"
+                        />
+                        <div className="pt-5">
+                          <h4 className="font-bold text-base text-slate-900 dark:text-slate-100 flex items-center gap-1 group-hover:text-indigo-600 transition-colors">
+                            <span>{language === 'bn' ? pg.nameBn || pg.name : pg.name}</span>
+                            {pg.isVerified && <span className="text-blue-500 text-xs">✓</span>}
+                          </h4>
+                          <p className="text-[11px] text-slate-500">
+                            {pg.followersCount.toLocaleString()}{' '}
+                            {language === 'bn' ? 'জন ফলোয়ার' : 'followers'}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
+                        {pg.description}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPageId(pg.id)}
+                      className="py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold cursor-pointer"
+                    >
+                      {language === 'bn' ? 'পেইজ দেখুন' : 'Open Page'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleFollowPage(pg.id)}
+                      className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                        pg.isFollowed
+                          ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+                          : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                      }`}
+                    >
+                      {pg.isFollowed ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>{language === 'bn' ? 'ফলো করছেন' : 'Following'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>{language === 'bn' ? 'ফলো করুন' : 'Follow Page'}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ===================================================================== */}
       {/* PRIVACY-PROTECTED GOOGLE CHAT & VIDEO SECTION                          */}
@@ -1549,7 +1765,7 @@ export const GroupsView: React.FC = () => {
       {/* Create New Page Modal */}
       {isCreatePageOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[90vh] overflow-y-auto">
             <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 <Flag className="w-4 h-4 text-indigo-600" />
@@ -1575,10 +1791,12 @@ export const GroupsView: React.FC = () => {
                     newPageDescription.trim() ||
                     (language === 'bn' ? 'অফিসিয়াল কমিউনিটি ও ব্র্যান্ড পেইজ' : 'Official Brand & Community Page'),
                   coverImage: newPageCover || undefined,
+                  avatar: newPageAvatar || undefined,
                 });
                 setNewPageName('');
                 setNewPageDescription('');
                 setNewPageCover('');
+                setNewPageAvatar('');
                 setIsCreatePageOpen(false);
               }}
               className="p-5 space-y-3.5"
@@ -1606,6 +1824,62 @@ export const GroupsView: React.FC = () => {
                   onChange={(e) => setNewPageCategory(e.target.value)}
                   className="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100"
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <label className="flex flex-col items-center justify-center p-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer text-center">
+                  <ImageIcon className="w-4 h-4 text-indigo-600 mb-1" />
+                  <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                    {newPageAvatar
+                      ? language === 'bn'
+                        ? 'অ্যাভাটার যুক্ত ✓'
+                        : 'Avatar Ready ✓'
+                      : language === 'bn'
+                      ? 'লোগো / ছবি দিন'
+                      : 'Upload Avatar'}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        setNewPageAvatar(await fileToDataUrl(file));
+                      } catch {
+                        // ignore
+                      }
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+                <label className="flex flex-col items-center justify-center p-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer text-center">
+                  <ImageIcon className="w-4 h-4 text-emerald-600 mb-1" />
+                  <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                    {newPageCover
+                      ? language === 'bn'
+                        ? 'কভার যুক্ত ✓'
+                        : 'Cover Ready ✓'
+                      : language === 'bn'
+                      ? 'কভার ছবি দিন'
+                      : 'Upload Cover'}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        setNewPageCover(await fileToDataUrl(file));
+                      } catch {
+                        // ignore
+                      }
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
