@@ -125,9 +125,33 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isInsightsOpen, setIsInsightsOpen] = useState(false);
   const [isLiveWatchOpen, setIsLiveWatchOpen] = useState(false);
-  const [videoError, setVideoError] = useState(false);
   const postVideoRef = useRef<HTMLVideoElement | null>(null);
+  const videoContainerRef = useRef<HTMLDivElement | null>(null);
   const [videoSeekFeedback, setVideoSeekFeedback] = useState<{ dir: 'back' | 'forward'; id: number } | null>(null);
+
+  // Auto-pause feed video when scrolled out of viewport
+  useEffect(() => {
+    const container = videoContainerRef.current;
+    const vid = postVideoRef.current;
+    if (!container || !isVideoPost) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting && postVideoRef.current && !postVideoRef.current.paused) {
+            postVideoRef.current.pause();
+          }
+        });
+      },
+      { threshold: 0.25 },
+    );
+
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+      if (vid && !vid.paused) vid.pause();
+    };
+  }, [isVideoPost]);
 
   const seekVideoBySeconds = (deltaSeconds: number) => {
     if (!postVideoRef.current) return;
@@ -872,109 +896,71 @@ export const PostCard: React.FC<PostCardProps> = ({ post }) => {
 
       {/* Post Media / Image or Video */}
       {isVideoPost && resolvedVideoSrc ? (
-        <div className="mt-2 bg-black relative rounded-2xl overflow-hidden group select-none">
-          {!videoError ? (
-            <>
-              <SmartVideo
-                ref={postVideoRef}
-                src={resolvedVideoSrc}
-                controls
-                playsInline
-                preload="metadata"
-                language={language}
-                containerClassName="relative w-full bg-black"
-                className="w-full max-h-[540px] object-contain"
-                onError={() => {
-                  console.warn('Video failed to load in post, offering reload / live room');
-                  setVideoError(true);
-                }}
-              />
+        <div
+          ref={videoContainerRef}
+          className="mt-2 bg-black relative rounded-2xl overflow-hidden group select-none"
+        >
+          <SmartVideo
+            ref={postVideoRef}
+            src={resolvedVideoSrc}
+            controls
+            playsInline
+            preload="metadata"
+            language={language}
+            containerClassName="relative w-full bg-black"
+            className="w-full max-h-[540px] object-contain"
+          />
 
-              {/* 5-Second Rewind & Fast-Forward Control Bar (ভিডিও ৫ সেকেন্ড করে টানার ফিচার) */}
-              <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity">
-                <button
-                  type="button"
-                  onClick={() => seekVideoBySeconds(-5)}
-                  className="px-2.5 py-1 rounded-full bg-slate-900/85 hover:bg-slate-900 text-white text-[11px] font-bold backdrop-blur-md border border-white/20 flex items-center gap-1 transition-all shadow-md active:scale-95 cursor-pointer"
-                  title={language === 'bn' ? '৫ সেকেন্ড পিছিয়ে যান (-৫ সে.)' : 'Rewind 5 seconds (-5s)'}
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
-                  <span>-5s</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => seekVideoBySeconds(5)}
-                  className="px-2.5 py-1 rounded-full bg-slate-900/85 hover:bg-slate-900 text-white text-[11px] font-bold backdrop-blur-md border border-white/20 flex items-center gap-1 transition-all shadow-md active:scale-95 cursor-pointer"
-                  title={language === 'bn' ? '৫ সেকেন্ড এগিয়ে যান (+৫ সে.)' : 'Skip forward 5 seconds (+5s)'}
-                >
-                  <span>+5s</span>
-                  <RotateCw className="w-3.5 h-3.5 text-emerald-400" />
-                </button>
-              </div>
+          {/* 5-Second Rewind & Fast-Forward Control Bar */}
+          <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity">
+            {post.isLive && (
+              <button
+                type="button"
+                onClick={() => setIsLiveWatchOpen(true)}
+                className="px-2.5 py-1 rounded-full bg-red-600/95 hover:bg-red-600 text-white text-[11px] font-bold flex items-center gap-1 shadow-md cursor-pointer"
+              >
+                <Radio className="w-3 h-3" />
+                <span>{language === 'bn' ? 'লাইভ রুম' : 'Live Room'}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => seekVideoBySeconds(-5)}
+              className="px-2.5 py-1 rounded-full bg-slate-900/85 hover:bg-slate-900 text-white text-[11px] font-bold backdrop-blur-md border border-white/20 flex items-center gap-1 transition-all shadow-md active:scale-95 cursor-pointer"
+              title={language === 'bn' ? '৫ সেকেন্ড পিছিয়ে যান (-৫ সে.)' : 'Rewind 5 seconds (-5s)'}
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+              <span>-5s</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => seekVideoBySeconds(5)}
+              className="px-2.5 py-1 rounded-full bg-slate-900/85 hover:bg-slate-900 text-white text-[11px] font-bold backdrop-blur-md border border-white/20 flex items-center gap-1 transition-all shadow-md active:scale-95 cursor-pointer"
+              title={language === 'bn' ? '৫ সেকেন্ড এগিয়ে যান (+৫ সে.)' : 'Skip forward 5 seconds (+5s)'}
+            >
+              <span>+5s</span>
+              <RotateCw className="w-3.5 h-3.5 text-emerald-400" />
+            </button>
+          </div>
 
-              {/* Floating Ripple Badge on Seeking +/- 5s */}
-              {videoSeekFeedback && (
-                <div
-                  className={`pointer-events-none absolute top-1/2 -translate-y-1/2 z-30 flex items-center justify-center animate-in zoom-in-75 fade-in duration-150 ${
-                    videoSeekFeedback.dir === 'back' ? 'left-8' : 'right-8'
-                  }`}
-                >
-                  <div className="px-3 py-2 rounded-2xl bg-black/85 text-white backdrop-blur-md border border-white/30 flex items-center gap-2 shadow-2xl font-black text-sm">
-                    {videoSeekFeedback.dir === 'back' ? (
-                      <>
-                        <RotateCcw className="w-4 h-4 text-amber-400" />
-                        <span>-5 Seconds</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>+5 Seconds</span>
-                        <RotateCw className="w-4 h-4 text-emerald-400" />
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="w-full min-h-[220px] bg-slate-950 flex flex-col items-center justify-center p-6 text-center text-white space-y-3">
-              <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-blue-500 shadow-lg">
-                <Play className="w-6 h-6 fill-current" />
-              </div>
-              <div>
-                <p className="font-bold text-sm text-slate-100">
-                  {language === 'bn' ? 'ভিডিও প্লেয়ার' : 'Video Player'}
-                </p>
-                <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                  {language === 'bn'
-                    ? 'ভিডিওটি পুনরায় লোড করতে নিচের বাটনে চাপ দিন'
-                    : 'Click reload to retry video playback'}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap justify-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVideoError(false);
-                    setTimeout(() => {
-                      if (postVideoRef.current) {
-                        postVideoRef.current.load();
-                        postVideoRef.current.play().catch(() => {});
-                      }
-                    }, 50);
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold cursor-pointer border border-slate-700"
-                >
-                  {language === 'bn' ? 'পুনরায় চেষ্টা করুন' : 'Retry'}
-                </button>
-                {post.isLive && (
-                  <button
-                    type="button"
-                    onClick={() => setIsLiveWatchOpen(true)}
-                    className="px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold cursor-pointer flex items-center gap-1.5"
-                  >
-                    <Radio className="w-3.5 h-3.5" />
-                    <span>{language === 'bn' ? 'লাইভ রুমে দেখুন' : 'Watch in Live Room'}</span>
-                  </button>
+          {/* Floating Ripple Badge on Seeking +/- 5s */}
+          {videoSeekFeedback && (
+            <div
+              className={`pointer-events-none absolute top-1/2 -translate-y-1/2 z-30 flex items-center justify-center animate-in zoom-in-75 fade-in duration-150 ${
+                videoSeekFeedback.dir === 'back' ? 'left-8' : 'right-8'
+              }`}
+            >
+              <div className="px-3 py-2 rounded-2xl bg-black/85 text-white backdrop-blur-md border border-white/30 flex items-center gap-2 shadow-2xl font-black text-sm">
+                {videoSeekFeedback.dir === 'back' ? (
+                  <>
+                    <RotateCcw className="w-4 h-4 text-amber-400" />
+                    <span>-5 Seconds</span>
+                  </>
+                ) : (
+                  <>
+                    <span>+5 Seconds</span>
+                    <RotateCw className="w-4 h-4 text-emerald-400" />
+                  </>
                 )}
               </div>
             </div>

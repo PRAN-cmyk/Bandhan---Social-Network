@@ -17,6 +17,8 @@ import {
 import { useApp } from '../context/AppContext';
 import { fileToDataUrl } from '../utils/storage';
 import { createAvatarUrl } from '../data/mockData';
+import { BandhanLogo } from './BandhanLogo';
+import { SmartImage } from './SmartImage';
 
 export const AuthScreen: React.FC = () => {
   const {
@@ -230,28 +232,21 @@ export const AuthScreen: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#f0f2f5] dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col justify-between transition-colors">
       {/* Top Bar */}
-      <header className="w-full max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-full bg-[#1877F2] flex items-center justify-center text-white font-black text-xl shadow-sm">
-            b
-          </div>
-          <span className="font-extrabold text-xl tracking-tight text-[#1877F2]">
-            bandhan
-          </span>
-        </div>
+      <header className="w-full max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between">
+        <BandhanLogo variant="navbar" language={language} />
 
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setLanguage(language === 'bn' ? 'en' : 'bn')}
-            className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold cursor-pointer"
+            className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold cursor-pointer hover:border-blue-500 transition-colors"
           >
             {language === 'bn' ? 'English' : 'বাংলা'}
           </button>
           <button
             type="button"
             onClick={toggleDarkMode}
-            className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 cursor-pointer"
+            className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 cursor-pointer hover:border-blue-500 transition-colors"
           >
             {isDarkMode ? (
               <Sun className="w-4 h-4 text-amber-400" />
@@ -262,33 +257,16 @@ export const AuthScreen: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Facebook-style Two-Column Auth Container */}
+      {/* Main Two-Column Auth Container */}
       <main className="w-full max-w-6xl mx-auto px-4 py-6 md:py-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left Column: Brand + Recent Logins */}
         <div className="lg:col-span-7 space-y-6">
-          <div>
-            {/* WELCOME friend Logo Emblem */}
-            <div className="inline-flex items-center gap-3.5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white shadow-xl shadow-blue-500/25 border border-white/20 mb-4 animate-in fade-in zoom-in-95 duration-200">
-              <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-2xl shadow-inner border border-white/30 shrink-0">
-                🤝
-              </div>
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-blue-200 block leading-tight">
-                  {language === 'bn' ? 'স্বাগতম প্রিয় বন্ধু' : 'HELLO &'}
-                </span>
-                <span className="text-xl sm:text-2xl font-black tracking-tight leading-none">
-                  WELCOME friend
-                </span>
-              </div>
-            </div>
-
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-[#1877F2] tracking-tight">
-              {language === 'bn' ? 'বন্ধন (Bandhan)' : 'bandhan'}
-            </h1>
-            <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 mt-2 max-w-xl leading-relaxed">
+          <div className="p-5 sm:p-6 rounded-3xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border border-slate-200/80 dark:border-slate-800 shadow-lg space-y-4">
+            <BandhanLogo variant="hero" language={language} />
+            <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 max-w-xl leading-relaxed">
               {language === 'bn'
-                ? 'বন্ধন আপনাকে বন্ধুদের সাথে যুক্ত থাকতে, ছবি ও বড় ভিডিও শেয়ার করতে এবং কন্টেন্ট থেকে উপার্জন করতে সাহায্য করে।'
-                : 'Bandhan helps you connect with friends, share photos & full-length HD videos, and monetize your content.'}
+                ? 'বন্ধন আপনাকে বন্ধুদের সাথে যুক্ত থাকতে, ছবি ও HD ভিডিও শেয়ার করতে, স্টোরি-রিল উপভোগ করতে এবং নিরাপদ মেসেঞ্জারে কথা বলতে সাহায্য করে।'
+                : 'Bandhan connects you with friends to share photos & HD videos, enjoy stories & reels, and chat privately in real time.'}
             </p>
           </div>
 
@@ -312,9 +290,11 @@ export const AuthScreen: React.FC = () => {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <img
+                    <SmartImage
                       src={lockedProfile.avatar}
                       alt={lockedProfile.name}
+                      fallbackType="avatar"
+                      fallbackLabel={lockedProfile.name}
                       className="w-9 h-9 rounded-full object-cover"
                     />
                     <div>
@@ -386,10 +366,11 @@ export const AuthScreen: React.FC = () => {
                   className="group bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs hover:shadow-md hover:border-blue-500 transition-all text-center flex flex-col cursor-pointer"
                 >
                   <div className="w-full aspect-square bg-slate-100 dark:bg-slate-800 relative overflow-hidden">
-                    <img
+                    <SmartImage
                       src={prof.avatar}
                       alt={prof.name}
-                      referrerPolicy="no-referrer"
+                      fallbackType="avatar"
+                      fallbackLabel={prof.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                     {prof.pinHash && (
@@ -846,9 +827,11 @@ export const AuthScreen: React.FC = () => {
                   const targetUser = profiles.find((p) => p.id === forgotPinTargetUserId);
                   return (
                     <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                      <img
+                      <SmartImage
                         src={targetUser?.avatar}
-                        alt={targetUser?.name}
+                        alt={targetUser?.name || 'User'}
+                        fallbackType="avatar"
+                        fallbackLabel={targetUser?.name || 'User'}
                         className="w-10 h-10 rounded-full object-cover"
                       />
                       <div>

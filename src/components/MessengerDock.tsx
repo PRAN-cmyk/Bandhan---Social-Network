@@ -18,6 +18,7 @@ import {
   Search,
   Copy,
   Loader2,
+  Settings,
 } from 'lucide-react';
 import { uploadMediaToCloudinary, isVideoFile as checkIsVideoFile } from '../utils/cloudinary';
 import { useApp } from '../context/AppContext';
@@ -30,7 +31,7 @@ import {
   subscribeToChatMessagesCloud,
   markChatMessageSeenCloud,
 } from '../firebase';
-import { SmartVideo } from './SmartVideo';
+import { SmartVideo, pauseAllOtherMedia } from './SmartVideo';
 import { SmartImage } from './SmartImage';
 
 const MESSENGER_EMOJI_CATEGORIES: Record<'smileys' | 'hearts' | 'gestures', string[]> = {
@@ -60,6 +61,8 @@ export const MessengerDock: React.FC = () => {
     activeGroupChatId,
     setActiveGroupChatId,
     isMyStatusOnline,
+    toggleMyOnlineStatus,
+    setIsAccountSecurityOpen,
     language,
     t,
   } = useApp();
@@ -102,6 +105,22 @@ export const MessengerDock: React.FC = () => {
       return true;
     }
   });
+  const [notifSoundEnabled, setNotifSoundEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('bandhan_notif_sound') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const [chatTheme, setChatTheme] = useState<'blue' | 'indigo' | 'emerald' | 'rose'>(() => {
+    try {
+      const saved = localStorage.getItem('bandhan_pref_chat_theme');
+      if (saved === 'indigo' || saved === 'emerald' || saved === 'rose') return saved;
+    } catch {}
+    return 'blue';
+  });
+  const [settingsOpenFriendId, setSettingsOpenFriendId] = useState<string | null>(null);
+  const [clearConfirmFriendId, setClearConfirmFriendId] = useState<string | null>(null);
   const markedSeenIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -109,6 +128,11 @@ export const MessengerDock: React.FC = () => {
       try {
         setTypingPrefEnabled(localStorage.getItem('bandhan_pref_typing') !== 'false');
         setReadReceiptsPrefEnabled(localStorage.getItem('bandhan_pref_read_receipts') !== 'false');
+        setNotifSoundEnabled(localStorage.getItem('bandhan_notif_sound') !== 'false');
+        const savedTheme = localStorage.getItem('bandhan_pref_chat_theme');
+        if (savedTheme === 'blue' || savedTheme === 'indigo' || savedTheme === 'emerald' || savedTheme === 'rose') {
+          setChatTheme(savedTheme);
+        }
       } catch {}
     };
     window.addEventListener('bandhan-prefs-updated', syncPrefs);
@@ -118,6 +142,22 @@ export const MessengerDock: React.FC = () => {
       window.removeEventListener('storage', syncPrefs);
     };
   }, []);
+
+  const updateMessengerPref = (key: string, value: string) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch {}
+    window.dispatchEvent(new Event('bandhan-prefs-updated'));
+  };
+
+  const bubbleClass =
+    chatTheme === 'indigo'
+      ? 'bg-indigo-600'
+      : chatTheme === 'emerald'
+      ? 'bg-emerald-600'
+      : chatTheme === 'rose'
+      ? 'bg-rose-600'
+      : 'bg-blue-600';
 
   const startVoiceRecording = async (friendId: string) => {
     try {
@@ -590,7 +630,7 @@ export const MessengerDock: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
                   onClick={() =>
@@ -622,16 +662,21 @@ export const MessengerDock: React.FC = () => {
                 >
                   <Video className="w-3.5 h-3.5" />
                 </button>
-                {conv.messages.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => clearConversation(friendId)}
-                    className="p-1.5 rounded-full text-slate-400 hover:text-amber-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                    title={language === 'bn' ? 'চ্যাট পরিষ্কার করুন' : 'Clear chat'}
-                  >
-                    <Eraser className="w-3.5 h-3.5" />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClearConfirmFriendId(null);
+                    setSettingsOpenFriendId((prev) => (prev === friendId ? null : friendId));
+                  }}
+                  className={`p-1.5 rounded-full transition-colors cursor-pointer ${
+                    settingsOpenFriendId === friendId
+                      ? 'bg-blue-100 dark:bg-blue-950 text-blue-600'
+                      : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                  title={language === 'bn' ? 'মেসেঞ্জার সেটিংস' : 'Messenger Settings'}
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                </button>
                 <button
                   onClick={() => toggleMinimize(friendId)}
                   className="p-1.5 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
@@ -646,6 +691,140 @@ export const MessengerDock: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {/* In-Dock Quick Messenger Settings Drawer */}
+            {!isMinimized && settingsOpenFriendId === friendId && (
+              <div className="px-3 py-2.5 bg-slate-50 dark:bg-slate-800/95 border-b border-slate-200 dark:border-slate-700 space-y-2 text-[11px] shrink-0">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-800 dark:text-slate-100">
+                    {language === 'bn' ? 'মেসেঞ্জার সেটিংস' : 'Messenger Settings'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSettingsOpenFriendId(null);
+                      window.dispatchEvent(new CustomEvent('bandhan:open-settings-tab', { detail: 'messenger' }));
+                      setIsAccountSecurityOpen(true);
+                    }}
+                    className="text-blue-600 dark:text-blue-400 font-bold hover:underline cursor-pointer"
+                  >
+                    {language === 'bn' ? 'সব সেটিংস' : 'All Settings'}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={toggleMyOnlineStatus}
+                    className={`px-2 py-1.5 rounded-lg font-semibold flex items-center justify-between cursor-pointer ${
+                      isMyStatusOnline
+                        ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-white dark:bg-slate-900 text-slate-500'
+                    }`}
+                  >
+                    <span>{language === 'bn' ? 'সক্রিয় স্ট্যাটাস' : 'Active Status'}</span>
+                    <span>{isMyStatusOnline ? 'ON' : 'OFF'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateMessengerPref('bandhan_pref_typing', String(!typingPrefEnabled))}
+                    className={`px-2 py-1.5 rounded-lg font-semibold flex items-center justify-between cursor-pointer ${
+                      typingPrefEnabled
+                        ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
+                        : 'bg-white dark:bg-slate-900 text-slate-500'
+                    }`}
+                  >
+                    <span>{language === 'bn' ? 'টাইপিং স্ট্যাটাস' : 'Typing'}</span>
+                    <span>{typingPrefEnabled ? 'ON' : 'OFF'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateMessengerPref('bandhan_pref_read_receipts', String(!readReceiptsPrefEnabled))}
+                    className={`px-2 py-1.5 rounded-lg font-semibold flex items-center justify-between cursor-pointer ${
+                      readReceiptsPrefEnabled
+                        ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
+                        : 'bg-white dark:bg-slate-900 text-slate-500'
+                    }`}
+                  >
+                    <span>{language === 'bn' ? 'রিড রিসিপ্ট' : 'Seen'}</span>
+                    <span>{readReceiptsPrefEnabled ? 'ON' : 'OFF'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateMessengerPref('bandhan_notif_sound', String(!notifSoundEnabled))}
+                    className={`px-2 py-1.5 rounded-lg font-semibold flex items-center justify-between cursor-pointer ${
+                      notifSoundEnabled
+                        ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
+                        : 'bg-white dark:bg-slate-900 text-slate-500'
+                    }`}
+                  >
+                    <span>{language === 'bn' ? 'মেসেজ সাউন্ড' : 'Sound'}</span>
+                    <span>{notifSoundEnabled ? 'ON' : 'OFF'}</span>
+                  </button>
+                </div>
+
+                {/* Bubble Accent Color & Clear Chat Confirm */}
+                <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500 dark:text-slate-400 font-semibold">
+                      {language === 'bn' ? 'থিম:' : 'Theme:'}
+                    </span>
+                    {(
+                      [
+                        { id: 'blue', dot: 'bg-blue-600' },
+                        { id: 'indigo', dot: 'bg-indigo-600' },
+                        { id: 'emerald', dot: 'bg-emerald-600' },
+                        { id: 'rose', dot: 'bg-rose-600' },
+                      ] as const
+                    ).map((th) => (
+                      <button
+                        key={th.id}
+                        type="button"
+                        onClick={() => updateMessengerPref('bandhan_pref_chat_theme', th.id)}
+                        className={`w-4 h-4 rounded-full ${th.dot} cursor-pointer ${
+                          chatTheme === th.id ? 'ring-2 ring-offset-1 ring-slate-700 dark:ring-white' : 'opacity-70'
+                        }`}
+                        title={th.id}
+                      />
+                    ))}
+                  </div>
+
+                  {conv.messages.length > 0 && (
+                    clearConfirmFriendId === friendId ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            clearConversation(friendId);
+                            setClearConfirmFriendId(null);
+                            setSettingsOpenFriendId(null);
+                          }}
+                          className="px-2 py-0.5 rounded bg-rose-600 text-white font-bold cursor-pointer"
+                        >
+                          {language === 'bn' ? 'নিশ্চিত মুছুন' : 'Confirm'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setClearConfirmFriendId(null)}
+                          className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 cursor-pointer"
+                        >
+                          {language === 'bn' ? 'বাতিল' : 'Cancel'}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setClearConfirmFriendId(friendId)}
+                        className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400 font-bold hover:underline cursor-pointer"
+                      >
+                        <Eraser className="w-3 h-3" />
+                        <span>{language === 'bn' ? 'চ্যাট মুছুন' : 'Clear Chat'}</span>
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Collapsible In-Chat Search Bar */}
             {!isMinimized && chatSearchOpenMap[friendId] && (
@@ -798,7 +977,7 @@ export const MessengerDock: React.FC = () => {
                             <div
                               className={`max-w-[76%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
                                 isMe
-                                  ? 'bg-blue-600 text-white rounded-br-xs shadow-xs'
+                                  ? `${bubbleClass} text-white rounded-br-xs shadow-xs`
                                   : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200/70 dark:border-slate-700 rounded-bl-xs'
                               }`}
                             >
@@ -840,7 +1019,13 @@ export const MessengerDock: React.FC = () => {
                               )}
                               {msg.audioUrl ? (
                                 <div className="my-1.5 space-y-1">
-                                  <audio controls src={msg.audioUrl} className="w-52 h-8 max-w-full rounded-lg" />
+                                  <audio
+                                    controls
+                                    controlsList="nodownload"
+                                    src={msg.audioUrl}
+                                    onPlay={(e) => pauseAllOtherMedia(e.currentTarget)}
+                                    className="w-52 h-8 max-w-full rounded-lg"
+                                  />
                                   <span className={`block text-[10px] font-semibold ${isMe ? 'text-blue-100' : 'text-slate-600 dark:text-slate-300'}`}>
                                     🎙️ Voice Note
                                   </span>

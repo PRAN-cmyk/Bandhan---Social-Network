@@ -48,6 +48,7 @@ import { useApp } from '../context/AppContext';
 import { PostCard } from './PostCard';
 import { CreatePostBox } from './CreatePostBox';
 import { SmartVideo } from './SmartVideo';
+import { SmartImage } from './SmartImage';
 import { sampleUsers, createAvatarUrl } from '../data/mockData';
 import { User as UserType, Post } from '../types';
 import { fileToDataUrl } from '../utils/storage';
@@ -474,10 +475,11 @@ export const ProfileView: React.FC = () => {
         {/* Cover Photo */}
         <div className="relative h-48 sm:h-72 w-full bg-slate-200 dark:bg-slate-800">
           {profileUser.coverImage ? (
-            <img
+            <SmartImage
               src={profileUser.coverImage}
               alt="Cover"
-              referrerPolicy="no-referrer"
+              fallbackType="media"
+              fallbackLabel={profileUser.name}
               className="w-full h-full object-cover"
             />
           ) : (
@@ -501,15 +503,16 @@ export const ProfileView: React.FC = () => {
         </div>
 
         {/* Profile Info Row */}
-        <div className="px-6 pb-4">
+        <div className="px-3 sm:px-6 pb-4">
           <div className="flex flex-col sm:flex-row items-center sm:items-end justify-between -mt-16 sm:-mt-20 gap-4 mb-4">
             <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4 text-center sm:text-left">
               {/* Profile Avatar */}
               <div className="relative group shrink-0">
-                <img
+                <SmartImage
                   src={profileUser.avatar}
                   alt={profileUser.name}
-                  referrerPolicy="no-referrer"
+                  fallbackType="avatar"
+                  fallbackLabel={profileUser.name}
                   className="w-32 h-32 sm:w-36 sm:h-36 rounded-full border-4 border-white dark:border-slate-900 object-cover shadow-xl bg-white dark:bg-slate-800"
                 />
                 <span className="absolute bottom-3 right-3 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-900 shadow-sm" />
@@ -900,10 +903,11 @@ export const ProfileView: React.FC = () => {
                 return (
                   <div key={userId} className="py-3.5 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3 min-w-0">
-                      <img
+                      <SmartImage
                         src={user.avatar}
                         alt={user.name}
-                        referrerPolicy="no-referrer"
+                        fallbackType="avatar"
+                        fallbackLabel={user.name}
                         className="w-11 h-11 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0"
                       />
                       <div className="truncate">
@@ -1068,10 +1072,10 @@ export const ProfileView: React.FC = () => {
                           onClick={() => setLightboxIndex(i)}
                           className="aspect-square cursor-pointer overflow-hidden group relative"
                         >
-                          <img
+                          <SmartImage
                             src={img}
                             alt="Photo"
-                            referrerPolicy="no-referrer"
+                            fallbackType="media"
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                           />
                         </div>
@@ -1104,10 +1108,11 @@ export const ProfileView: React.FC = () => {
                         onClick={() => viewUserProfile(c)}
                         className="cursor-pointer group flex flex-col items-center text-center"
                       >
-                        <img
+                        <SmartImage
                           src={c.avatar}
                           alt={c.name}
-                          referrerPolicy="no-referrer"
+                          fallbackType="avatar"
+                          fallbackLabel={c.name}
                           className="w-14 h-14 rounded-xl object-cover shadow-xs group-hover:opacity-90 transition-opacity"
                         />
                         <p className="text-[11px] font-bold text-slate-800 dark:text-slate-200 truncate w-full mt-1">
@@ -1256,10 +1261,10 @@ export const ProfileView: React.FC = () => {
                           className="group relative aspect-square rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 flex flex-col justify-between shadow-xs cursor-pointer"
                         >
                           {post.image ? (
-                            <img
+                            <SmartImage
                               src={post.image}
                               alt="Post preview"
-                              referrerPolicy="no-referrer"
+                              fallbackType="media"
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                             />
                           ) : post.video ? (
@@ -1477,10 +1482,11 @@ export const ProfileView: React.FC = () => {
                     className="flex items-center gap-3 min-w-0 cursor-pointer"
                   >
                     <div className="relative shrink-0">
-                      <img
+                      <SmartImage
                         src={c.avatar}
                         alt={c.name}
-                        referrerPolicy="no-referrer"
+                        fallbackType="avatar"
+                        fallbackLabel={c.name}
                         className="w-11 h-11 rounded-full object-cover"
                       />
                       <span
@@ -1593,10 +1599,11 @@ export const ProfileView: React.FC = () => {
                       />
                     </div>
                   ) : (
-                    <img
+                    <SmartImage
                       src={reel.posterUrl}
                       alt={reel.description}
-                      referrerPolicy="no-referrer"
+                      fallbackType="media"
+                      fallbackLabel={reel.author.name}
                       className="w-full aspect-video object-cover"
                     />
                   )}
@@ -1663,10 +1670,10 @@ export const ProfileView: React.FC = () => {
                   onClick={() => setLightboxIndex(i)}
                   className="aspect-square rounded-2xl overflow-hidden shadow-xs cursor-pointer group relative"
                 >
-                  <img
+                  <SmartImage
                     src={img}
                     alt="User photo"
-                    referrerPolicy="no-referrer"
+                    fallbackType="media"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                   />
                   <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
@@ -1845,10 +1852,10 @@ export const ProfileView: React.FC = () => {
                           key={photoIdx}
                           className="aspect-square rounded-2xl overflow-hidden shadow-xs relative group bg-slate-100 dark:bg-slate-800"
                         >
-                          <img
+                          <SmartImage
                             src={photoUrl}
                             alt="Album Photo"
-                            referrerPolicy="no-referrer"
+                            fallbackType="media"
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform cursor-pointer"
                             onClick={() => {
                               const idx = userPhotos.indexOf(photoUrl);
@@ -1892,10 +1899,10 @@ export const ProfileView: React.FC = () => {
                 >
                   <div className="aspect-video w-full bg-slate-200 dark:bg-slate-700 relative overflow-hidden">
                     {album.coverUrl || album.photos[0] ? (
-                      <img
+                      <SmartImage
                         src={album.coverUrl || album.photos[0]}
                         alt={album.title}
-                        referrerPolicy="no-referrer"
+                        fallbackType="media"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
                     ) : (
@@ -2098,10 +2105,10 @@ export const ProfileView: React.FC = () => {
                                   : 'border-transparent hover:border-slate-300'
                               }`}
                             >
-                              <img
+                              <SmartImage
                                 src={photoUrl}
                                 alt="Pick photo"
-                                referrerPolicy="no-referrer"
+                                fallbackType="media"
                                 className="w-full h-full object-cover"
                               />
                               {isAlreadyInAlbum && (
@@ -2172,9 +2179,10 @@ export const ProfileView: React.FC = () => {
           )}
 
           <div className="max-w-4xl max-h-[85vh] flex flex-col items-center">
-            <img
+            <SmartImage
               src={userPhotos[lightboxIndex]}
               alt="Lightbox view"
+              fallbackType="media"
               className="max-w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl"
             />
             <p className="text-white/70 text-xs font-semibold mt-3">
@@ -2214,9 +2222,11 @@ export const ProfileView: React.FC = () => {
                 {/* Avatar Row */}
                 <div className="flex items-center gap-4">
                   <div className="relative shrink-0">
-                    <img
+                    <SmartImage
                       src={editAvatarPreview}
                       alt="Avatar preview"
+                      fallbackType="avatar"
+                      fallbackLabel={profileUser.name}
                       className="w-16 h-16 rounded-full object-cover border-2 border-blue-500 shadow-md"
                     />
                     <label className="absolute bottom-0 right-0 p-1.5 bg-blue-600 text-white rounded-full cursor-pointer shadow-md hover:bg-blue-700">
@@ -2251,7 +2261,7 @@ export const ProfileView: React.FC = () => {
                           onClick={() => setEditAvatarPreview(av)}
                           className="w-6 h-6 rounded-full overflow-hidden border border-slate-200 hover:ring-2 hover:ring-blue-500 cursor-pointer"
                         >
-                          <img src={av} alt="Preset" className="w-full h-full object-cover" />
+                          <SmartImage src={av} alt="Preset" fallbackType="avatar" className="w-full h-full object-cover" />
                         </button>
                       ))}
                     </div>
@@ -2265,9 +2275,10 @@ export const ProfileView: React.FC = () => {
                   </p>
                   <div className="relative h-24 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800">
                     {editCoverPreview ? (
-                      <img
+                      <SmartImage
                         src={editCoverPreview}
                         alt="Cover preview"
+                        fallbackType="media"
                         className="w-full h-full object-cover"
                       />
                     ) : (
@@ -2581,10 +2592,11 @@ export const ProfileView: React.FC = () => {
                           }`}
                         >
                           <div className="flex items-center gap-3 min-w-0">
-                            <img
+                            <SmartImage
                               src={p.avatar}
                               alt={p.name}
-                              referrerPolicy="no-referrer"
+                              fallbackType="avatar"
+                              fallbackLabel={p.name}
                               className="w-11 h-11 rounded-full object-cover shrink-0 border border-slate-200 dark:border-slate-700"
                             />
                             <div className="truncate">
@@ -2633,12 +2645,14 @@ export const ProfileView: React.FC = () => {
                     {language === 'bn' ? 'প্রোফাইল ছবি' : 'Profile Picture'}
                   </label>
                   <div className="flex items-center gap-3">
-                    <img
+                    <SmartImage
                       src={
                         newAccAvatar ||
                         createAvatarUrl(newAccName || 'New User', '#1877F2', '#ffffff')
                       }
                       alt="Preview"
+                      fallbackType="avatar"
+                      fallbackLabel={newAccName || 'New User'}
                       className="w-12 h-12 rounded-full object-cover border-2 border-blue-500 shrink-0"
                     />
                     <label className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl font-bold cursor-pointer hover:bg-slate-200 transition-colors">

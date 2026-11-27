@@ -173,10 +173,38 @@ export function unsealEncryptedEnvelope<T>(raw: any): T | undefined {
 }
 
 /**
- * Initializes runtime anti-tamper protection to prevent external script injection.
+ * Validates external URLs to block javascript:, vbscript:, and HTML data URI injection.
+ */
+export function isSafeExternalUrl(url?: string | null): boolean {
+  if (!url) return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  const lower = trimmed.toLowerCase();
+  if (
+    lower.startsWith('javascript:') ||
+    lower.startsWith('vbscript:') ||
+    lower.startsWith('data:text/html')
+  ) {
+    return false;
+  }
+  return (
+    lower.startsWith('https://') ||
+    lower.startsWith('http://') ||
+    lower.startsWith('blob:') ||
+    lower.startsWith('data:image/') ||
+    lower.startsWith('data:video/') ||
+    lower.startsWith('data:audio/') ||
+    lower.startsWith('/') ||
+    lower.startsWith('./')
+  );
+}
+
+/**
+ * Initializes runtime anti-tamper & copy-deterrence protection while preserving
+ * normal copy/paste inside input fields, textareas, and recovery code blocks.
  */
 export function initSecurityShield(): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
   try {
     Object.defineProperty(window, '__BANDHAN_SECURITY_SHIELD__', {
       value: Object.freeze({
@@ -191,6 +219,43 @@ export function initSecurityShield(): void {
   } catch {
     // Already defined and frozen
   }
+
+  const w = window as unknown as Record<string, boolean>;
+  if (w.__BANDHAN_COPY_GUARD_ATTACHED__) return;
+  w.__BANDHAN_COPY_GUARD_ATTACHED__ = true;
+
+  // Prevent unintended drag-save of images & videos
+  document.addEventListener('dragstart', (e) => {
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === 'IMG' || target.tagName === 'VIDEO')) {
+      e.preventDefault();
+    }
+  });
+
+  // Deter source inspection hotkeys in production without breaking text inputs
+  document.addEventListener('keydown', (e) => {
+    const key = e.key.toLowerCase();
+    const isModifier = e.ctrlKey || e.metaKey;
+    if (
+      e.key === 'F12' ||
+      (isModifier && e.shiftKey && (key === 'i' || key === 'j' || key === 'c')) ||
+      (isModifier && key === 'u')
+    ) {
+      e.preventDefault();
+    }
+  });
+
+  // Deter right-click on media / chrome while allowing context menu on text inputs & selectable codes
+  document.addEventListener('contextmenu', (e) => {
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+    if (target.closest('input, textarea, [contenteditable="true"], .select-all, code')) {
+      return;
+    }
+    if (target.closest('img, video, svg')) {
+      e.preventDefault();
+    }
+  });
 }
 
 /**

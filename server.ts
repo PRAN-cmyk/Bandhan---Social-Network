@@ -29,6 +29,25 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000,ht
 
 const safeIdRegex = /^[a-zA-Z0-9_\-]+$/;
 
+const stripHtmlTags = (val: string): string =>
+  val
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]*>?/g, '')
+    .trim();
+
+const sanitizedText = (minLen: number, maxLen: number, minMsg?: string, maxMsg?: string) =>
+  z
+    .string()
+    .trim()
+    .transform(stripHtmlTags)
+    .pipe(
+      z
+        .string()
+        .min(minLen, minMsg || `Minimum ${minLen} character(s) required`)
+        .max(maxLen, maxMsg || `Maximum ${maxLen} characters allowed`),
+    );
+
 const isSafeUrl = (value: string): boolean => {
   const trimmed = value.trim();
   if (!trimmed) return true;
@@ -60,51 +79,86 @@ const postSchema = z.object({
     .min(1, 'Post ID is required')
     .max(200, 'Post ID too long')
     .regex(safeIdRegex, 'Invalid post ID format'),
-  content: z
-    .string()
-    .trim()
-    .min(1, 'Post content cannot be empty')
-    .max(10000, 'Post content exceeds 10,000 characters limit'),
+  content: sanitizedText(1, 10000, 'Post content cannot be empty', 'Post content exceeds 10,000 characters limit'),
   privacy: z.enum(['public', 'friends', 'only_me']).default('public'),
   mediaUrl: safeUrlField(500000).nullable().optional(),
   mediaType: z.enum(['image', 'video', 'text']).nullable().optional(),
   meetUri: safeUrlField(1000).nullable().optional(),
-  authorName: z.string().trim().max(200).optional(),
+  authorName: z.string().trim().transform(stripHtmlTags).pipe(z.string().max(200)).optional(),
   authorAvatar: safeUrlField(500000).optional(),
 });
 
 const meetingSchema = z.object({
-  spaceName: z.string().trim().max(200).default('spaces/instant'),
-  meetingCode: z.string().trim().max(200).default(''),
+  spaceName: z.string().trim().transform(stripHtmlTags).pipe(z.string().max(200)).default('spaces/instant'),
+  meetingCode: z.string().trim().transform(stripHtmlTags).pipe(z.string().max(200)).default(''),
   meetingUri: safeUrlField(2000).refine((v) => v.length > 0, 'Meeting URI is required'),
-  title: z.string().trim().max(300).default('Bandhan Video Meeting'),
+  title: z.string().trim().transform(stripHtmlTags).pipe(z.string().max(300)).default('Bandhan Video Meeting'),
 });
 
 export const albumSchema = z.object({
-  title: z.string().trim().min(1, 'Album title is required').max(150),
-  titleBn: z.string().trim().max(150).optional(),
-  description: z.string().trim().max(1000).optional(),
+  title: sanitizedText(1, 150, 'Album title is required'),
+  titleBn: z.string().trim().transform(stripHtmlTags).pipe(z.string().max(150)).optional(),
+  description: z.string().trim().transform(stripHtmlTags).pipe(z.string().max(1000)).optional(),
   coverUrl: safeUrlField(500000).optional(),
   photos: z.array(safeUrlField(500000)).default([]),
 });
 
+const safeServerError = (fallback: string, error: unknown): string => {
+  if (process.env.NODE_ENV === 'production') return fallback;
+  return error instanceof Error ? error.message : fallback;
+};
+
 async function startServer() {
   const app = express();
-  const PORT = process.env.NODE_ENV === 'production' && process.env.PORT ? Number(process.env.PORT) : 3000;
+  const isProd = process.env.NODE_ENV === 'production';
+  const PORT = isProd && process.env.PORT ? Number(process.env.PORT) : 3000;
 
+  app.disable('x-powered-by');
   app.use(
     helmet({
+      xPoweredBy: false,
       frameguard: false,
-      contentSecurityPolicy: false,
-      crossOriginResourcePolicy: false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
       crossOriginEmbedderPolicy: false,
       crossOriginOpenerPolicy: false,
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: [
+            "'self'",
+            "'unsafe-inline'",
+            ...(isProd ? [] : ["'unsafe-eval'"]),
+            'https://*.firebaseapp.com',
+            'https://*.googleapis.com',
+            'https://apis.google.com',
+          ],
+          styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+          fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
+          imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+          mediaSrc: ["'self'", 'data:', 'blob:', 'https:'],
+          connectSrc: [
+            "'self'",
+            'https://*.googleapis.com',
+            'https://*.firebaseio.com',
+            'https://*.cloudfunctions.net',
+            'https://firestore.googleapis.com',
+            'https://identitytoolkit.googleapis.com',
+            'https://securetoken.googleapis.com',
+            'https://api.cloudinary.com',
+            'https://res.cloudinary.com',
+          ],
+          frameSrc: ["'self'", 'https://*.firebaseapp.com', 'https://accounts.google.com'],
+          frameAncestors: ['*'],
+        },
+      },
     }),
   );
 
-  // Allow embedding within AI Studio iframe
+  // Allow embedding within AI Studio iframe & restrict unused sensors
   app.use((_req, res, next) => {
     res.removeHeader('X-Frame-Options');
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=()');
     next();
   });
 
@@ -168,8 +222,7 @@ async function startServer() {
       return res.json({ posts: rows });
     } catch (error: unknown) {
       console.error('Failed to fetch posts:', error);
-      const msg = error instanceof Error ? error.message : 'Failed to fetch posts';
-      return res.status(500).json({ error: msg });
+      return res.status(500).json({ error: safeServerError('Failed to fetch posts', error) });
     }
   });
 
@@ -211,8 +264,7 @@ async function startServer() {
       return res.json({ post: saved });
     } catch (error: unknown) {
       console.error('Failed to save post:', error);
-      const msg = error instanceof Error ? error.message : 'Failed to save post';
-      return res.status(500).json({ error: msg });
+      return res.status(500).json({ error: safeServerError('Failed to save post', error) });
     }
   });
 
@@ -235,8 +287,7 @@ async function startServer() {
       return res.json({ ok: true });
     } catch (error: unknown) {
       console.error('Failed to delete post:', error);
-      const msg = error instanceof Error ? error.message : 'Failed to delete post';
-      return res.status(500).json({ error: msg });
+      return res.status(500).json({ error: safeServerError('Failed to delete post', error) });
     }
   });
 
@@ -254,8 +305,7 @@ async function startServer() {
       return res.json({ meetings });
     } catch (error: unknown) {
       console.error('Failed to fetch meetings:', error);
-      const msg = error instanceof Error ? error.message : 'Failed to fetch meetings';
-      return res.status(500).json({ error: msg });
+      return res.status(500).json({ error: safeServerError('Failed to fetch meetings', error) });
     }
   });
 
@@ -289,8 +339,7 @@ async function startServer() {
       return res.json({ meeting: created });
     } catch (error: unknown) {
       console.error('Failed to save meeting:', error);
-      const msg = error instanceof Error ? error.message : 'Failed to save meeting';
-      return res.status(500).json({ error: msg });
+      return res.status(500).json({ error: safeServerError('Failed to save meeting', error) });
     }
   });
 

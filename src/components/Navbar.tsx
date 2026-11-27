@@ -26,6 +26,7 @@ import { createAvatarUrl } from '../data/mockData';
 import { NotificationCenter } from './NotificationCenter';
 import { CloudinarySettingsModal } from './CloudinarySettingsModal';
 import { SmartImage } from './SmartImage';
+import { BandhanLogo } from './BandhanLogo';
 
 export const Navbar: React.FC = () => {
   const {
@@ -182,7 +183,7 @@ export const Navbar: React.FC = () => {
     : null;
 
   return (
-    <header className="sticky top-0 z-40 h-12 md:h-14 w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 transition-colors">
+    <header className="sticky top-0 z-40 h-12 md:h-14 w-full max-w-full overflow-x-clip bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 transition-colors">
       <div className="h-full px-2 sm:px-4 flex items-center justify-between gap-1.5 sm:gap-2 max-w-[1920px] mx-auto">
         {/* Zone 1: Brand & Search */}
         <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 flex-1 md:flex-none" ref={searchRef}>
@@ -190,18 +191,11 @@ export const Navbar: React.FC = () => {
             onClick={() => setActiveTab('feed')}
             className="flex items-center gap-2 focus-visible:outline-none group text-left cursor-pointer shrink-0"
           >
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-600 to-indigo-500 flex items-center justify-center text-white font-black text-xl sm:text-2xl shadow-md shadow-blue-500/25 group-hover:scale-105 transition-transform">
-              ব
-            </div>
-            <div className="hidden sm:block">
-              <span className="text-xl font-bold tracking-tight text-blue-600 dark:text-blue-400">
-                {language === 'bn' ? 'বন্ধন' : 'Bandhan'}
-              </span>
-            </div>
+            <BandhanLogo variant="navbar" language={language} />
           </button>
 
           {/* Search Box with Local Storage History & Results */}
-          <div className="relative flex-1 max-w-[190px] sm:max-w-none md:flex-none">
+          <div className="relative flex-1 min-w-0 max-w-[148px] sm:max-w-none md:flex-none">
             <div className="relative flex items-center">
               <Search className="w-4 h-4 absolute left-2.5 sm:left-3 text-slate-400 pointer-events-none" />
               <input
@@ -641,30 +635,44 @@ export const Navbar: React.FC = () => {
                   <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
                     {t.messenger}
                   </h3>
-                  <button
-                    type="button"
-                    onClick={toggleMyOnlineStatus}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold cursor-pointer transition-colors ${
-                      isMyStatusOnline
-                        ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                    }`}
-                  >
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        isMyStatusOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={toggleMyOnlineStatus}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold cursor-pointer transition-colors ${
+                        isMyStatusOnline
+                          ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
                       }`}
-                    />
-                    <span>
-                      {isMyStatusOnline
-                        ? language === 'bn'
-                          ? 'অনলাইন সক্রিয়'
-                          : 'Active Online'
-                        : language === 'bn'
-                        ? 'অফলাইন'
-                        : 'Offline'}
-                    </span>
-                  </button>
+                    >
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          isMyStatusOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                        }`}
+                      />
+                      <span>
+                        {isMyStatusOnline
+                          ? language === 'bn'
+                            ? 'অনলাইন'
+                            : 'Online'
+                          : language === 'bn'
+                          ? 'অফলাইন'
+                          : 'Offline'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMessengerOpen(false);
+                        window.dispatchEvent(new CustomEvent('bandhan:open-settings-tab', { detail: 'messenger' }));
+                        setIsAccountSecurityOpen(true);
+                      }}
+                      className="p-1.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-950/60 text-slate-600 dark:text-slate-300 hover:text-blue-600 cursor-pointer transition-colors"
+                      title={language === 'bn' ? 'মেসেঞ্জার সেটিংস' : 'Messenger Settings'}
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Direct vs Group Chats Toggle */}

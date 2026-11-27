@@ -86,7 +86,7 @@ export const AccountSecurityModal: React.FC = () => {
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<
-    'appearance' | 'security' | '2fa' | 'activity' | 'privacy' | 'sessions' | 'data'
+    'appearance' | 'messenger' | 'security' | '2fa' | 'activity' | 'privacy' | 'sessions' | 'data'
   >('appearance');
 
   // PIN & Password State
@@ -141,8 +141,50 @@ export const AccountSecurityModal: React.FC = () => {
       return true;
     }
   });
+  const [chatTheme, setChatTheme] = useState<'blue' | 'indigo' | 'emerald' | 'rose'>(() => {
+    try {
+      const saved = localStorage.getItem('bandhan_pref_chat_theme');
+      if (saved === 'indigo' || saved === 'emerald' || saved === 'rose') return saved;
+    } catch {}
+    return 'blue';
+  });
   const [isCloudinaryModalOpen, setIsCloudinaryModalOpen] = useState(false);
   const cloudinaryConfig = getCloudinaryConfig();
+
+  useEffect(() => {
+    const handleOpenTab = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      if (
+        detail === 'appearance' ||
+        detail === 'messenger' ||
+        detail === 'security' ||
+        detail === '2fa' ||
+        detail === 'activity' ||
+        detail === 'privacy' ||
+        detail === 'sessions' ||
+        detail === 'data'
+      ) {
+        setActiveTab(detail);
+      }
+    };
+    const syncPrefs = () => {
+      try {
+        setNotifSoundEnabled(localStorage.getItem('bandhan_notif_sound') !== 'false');
+        setTypingIndicatorEnabled(localStorage.getItem('bandhan_pref_typing') !== 'false');
+        setReadReceiptsEnabled(localStorage.getItem('bandhan_pref_read_receipts') !== 'false');
+        const th = localStorage.getItem('bandhan_pref_chat_theme');
+        if (th === 'blue' || th === 'indigo' || th === 'emerald' || th === 'rose') {
+          setChatTheme(th);
+        }
+      } catch {}
+    };
+    window.addEventListener('bandhan:open-settings-tab', handleOpenTab);
+    window.addEventListener('bandhan-prefs-updated', syncPrefs);
+    return () => {
+      window.removeEventListener('bandhan:open-settings-tab', handleOpenTab);
+      window.removeEventListener('bandhan-prefs-updated', syncPrefs);
+    };
+  }, []);
 
   // Authentic Current Device Session Info (no fake remote IPs/devices)
   const [sessions, setSessions] = useState(() => {
@@ -390,6 +432,12 @@ export const AccountSecurityModal: React.FC = () => {
               labelEn: 'Theme & Language',
               labelBn: 'থিম ও ভাষা',
               icon: Globe,
+            },
+            {
+              id: 'messenger',
+              labelEn: 'Messenger',
+              labelBn: 'মেসেঞ্জার সেটিংস',
+              icon: MessageSquare,
             },
             {
               id: '2fa',
@@ -1127,6 +1175,218 @@ export const AccountSecurityModal: React.FC = () => {
             </div>
           )}
 
+          {/* DEDICATED MESSENGER SETTINGS TAB */}
+          {activeTab === 'messenger' && (
+            <div className="space-y-4">
+              {/* Active Status */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3">
+                <div>
+                  <h5 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <span
+                      className={`w-2.5 h-2.5 rounded-full ${isMyStatusOnline ? 'bg-emerald-500' : 'bg-slate-400'}`}
+                    />
+                    <span>{language === 'bn' ? 'অনলাইন উপস্থিতি (Active Status)' : 'Show Active Status'}</span>
+                  </h5>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {language === 'bn'
+                      ? 'বন্ধুরা মেসেঞ্জারে দেখতে পারবে আপনি কখন সক্রিয় আছেন।'
+                      : 'Let friends see when you are active in Messenger.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleMyOnlineStatus}
+                  className={`rounded-xl transition-colors cursor-pointer text-xs font-bold px-3 py-1.5 shrink-0 ${
+                    isMyStatusOnline
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                      : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  {isMyStatusOnline
+                    ? language === 'bn'
+                      ? 'অনলাইন (চালু)'
+                      : 'Active (On)'
+                    : language === 'bn'
+                    ? 'অফলাইন (বন্ধ)'
+                    : 'Offline (Off)'}
+                </button>
+              </div>
+
+              {/* Typing, Read Receipts & Sound */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 space-y-3">
+                <h5 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-blue-600" />
+                  <span>{language === 'bn' ? 'চ্যাট প্রাইভেসি ও অ্যালার্ট' : 'Chat Privacy & Alerts'}</span>
+                </h5>
+
+                <div className="flex items-center justify-between gap-3 pt-1">
+                  <div>
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      {language === 'bn' ? 'টাইপিং ইন্ডিকেটর দেখান' : 'Show Typing Indicator'}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {language === 'bn'
+                        ? 'মেসেজ লেখার সময় অপর প্রান্তে "লিখছেন..." দেখাবে।'
+                        : 'Let recipients see when you are typing in real time.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !typingIndicatorEnabled;
+                      setTypingIndicatorEnabled(next);
+                      try {
+                        localStorage.setItem('bandhan_pref_typing', String(next));
+                      } catch {}
+                      window.dispatchEvent(new Event('bandhan-prefs-updated'));
+                    }}
+                    className={`rounded-xl transition-colors cursor-pointer text-xs font-bold px-3 py-1.5 shrink-0 ${
+                      typingIndicatorEnabled
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                        : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {typingIndicatorEnabled ? (language === 'bn' ? 'চালু' : 'On') : language === 'bn' ? 'বন্ধ' : 'Off'}
+                  </button>
+                </div>
+
+                <div className="h-px bg-slate-200/70 dark:bg-slate-700/70" />
+
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      {language === 'bn' ? 'রিড রিসিপ্ট (Seen) পাঠান' : 'Send Read Receipts'}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {language === 'bn'
+                        ? 'আপনি মেসেজ দেখলে প্রেরকের কাছে Seen নিশ্চিতকরণ যাবে।'
+                        : 'Notify senders when you read their messages.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !readReceiptsEnabled;
+                      setReadReceiptsEnabled(next);
+                      try {
+                        localStorage.setItem('bandhan_pref_read_receipts', String(next));
+                      } catch {}
+                      window.dispatchEvent(new Event('bandhan-prefs-updated'));
+                    }}
+                    className={`rounded-xl transition-colors cursor-pointer text-xs font-bold px-3 py-1.5 shrink-0 ${
+                      readReceiptsEnabled
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                        : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {readReceiptsEnabled ? (language === 'bn' ? 'চালু' : 'On') : language === 'bn' ? 'বন্ধ' : 'Off'}
+                  </button>
+                </div>
+
+                <div className="h-px bg-slate-200/70 dark:bg-slate-700/70" />
+
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      {language === 'bn' ? 'নোটিফিকেশন ও মেসেজ সাউন্ড' : 'Message & Alert Chime'}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {language === 'bn'
+                        ? 'নতুন মেসেজ আসলে শব্দের মাধ্যমে সতর্কবার্তা চালু বা বন্ধ রাখুন।'
+                        : 'Control audio alerts when new messages arrive.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !notifSoundEnabled;
+                      setNotifSoundEnabled(next);
+                      try {
+                        localStorage.setItem('bandhan_notif_sound', String(next));
+                      } catch {}
+                      window.dispatchEvent(new Event('bandhan-prefs-updated'));
+                    }}
+                    className={`rounded-xl transition-colors cursor-pointer text-xs font-bold px-3 py-1.5 shrink-0 ${
+                      notifSoundEnabled
+                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                        : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {notifSoundEnabled ? (language === 'bn' ? 'চালু' : 'On') : language === 'bn' ? 'মিউট' : 'Muted'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Chat Bubble Theme Color */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 space-y-3">
+                <h5 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100">
+                  {language === 'bn' ? 'চ্যাট বাবল থিম কালার' : 'Chat Bubble Accent Color'}
+                </h5>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {(
+                    [
+                      { id: 'blue', labelEn: 'Cobalt Blue', labelBn: 'ক্লাসিক নীল', swatch: 'bg-blue-600' },
+                      { id: 'indigo', labelEn: 'Deep Indigo', labelBn: 'ইন্ডিগো', swatch: 'bg-indigo-600' },
+                      { id: 'emerald', labelEn: 'Emerald', labelBn: 'সবুজ', swatch: 'bg-emerald-600' },
+                      { id: 'rose', labelEn: 'Crimson Rose', labelBn: 'গোলাপী', swatch: 'bg-rose-600' },
+                    ] as const
+                  ).map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setChatTheme(item.id);
+                        try {
+                          localStorage.setItem('bandhan_pref_chat_theme', item.id);
+                        } catch {}
+                        window.dispatchEvent(new Event('bandhan-prefs-updated'));
+                        showToast(
+                          language === 'bn'
+                            ? 'মেসেঞ্জার থিম আপডেট হয়েছে'
+                            : 'Messenger theme updated',
+                        );
+                      }}
+                      className={`p-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 cursor-pointer transition-all ${
+                        chatTheme === item.id
+                          ? 'border-blue-600 bg-white dark:bg-slate-900 shadow-xs text-slate-900 dark:text-white'
+                          : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      <span className={`w-4 h-4 rounded-full ${item.swatch} shrink-0`} />
+                      <span className="truncate">{language === 'bn' ? item.labelBn : item.labelEn}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cloud Media Readiness */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3">
+                <div>
+                  <h5 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <Cloud className="w-4 h-4 text-sky-500" />
+                    <span>{language === 'bn' ? 'ভয়েস নোট ও মিডিয়া ক্লাউড' : 'Voice & Media Cloud'}</span>
+                  </h5>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    {cloudinaryConfig.cloudName
+                      ? language === 'bn'
+                        ? `সংযুক্ত: ${cloudinaryConfig.cloudName} (ভয়েস ও ভিডিও রেডি)`
+                        : `Connected: ${cloudinaryConfig.cloudName} (Media ready)`
+                      : language === 'bn'
+                      ? 'অন্য ডিভাইসে দ্রুত মিডিয়া শেয়ার করতে Cloudinary সেটআপ করুন।'
+                      : 'Configure Cloudinary for cross-device video & photo sharing.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCloudinaryModalOpen(true)}
+                  className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold cursor-pointer shrink-0"
+                >
+                  {language === 'bn' ? 'সেটআপ' : 'Configure'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* TAB 4: PRIVACY & PROFILE LOCK */}
           {activeTab === 'privacy' && (
             <div className="space-y-4">
@@ -1191,175 +1451,23 @@ export const AccountSecurityModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Online Active Status */}
-              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
-                <div>
-                  <h5 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                    <span
-                      className={`w-2.5 h-2.5 rounded-full ${isMyStatusOnline ? 'bg-emerald-500' : 'bg-slate-400'}`}
-                    />
-                    <span>{language === 'bn' ? 'অনলাইন উপস্থিতি (Active Status)' : 'Show Active Status'}</span>
-                  </h5>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              {/* Shortcut to Messenger Settings */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <MessageSquare className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
                     {language === 'bn'
-                      ? 'বন্ধুরা দেখতে পারবে আপনি কখন সক্রিয় বা অনলাইনে আছেন।'
-                      : 'Let friends see when you are active on the platform.'}
-                  </p>
+                      ? 'মেসেঞ্জারের অনলাইন স্ট্যাটাস, টাইপিং ও থিম নিয়ন্ত্রণ'
+                      : 'Messenger Active Status, Typing & Bubble Theme'}
+                  </span>
                 </div>
                 <button
                   type="button"
-                  onClick={toggleMyOnlineStatus}
-                  className={`p-1.5 rounded-xl transition-colors cursor-pointer text-xs font-bold px-3 py-1.5 ${
-                    isMyStatusOnline
-                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                      : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
-                  }`}
+                  onClick={() => setActiveTab('messenger')}
+                  className="px-3 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-bold cursor-pointer shrink-0"
                 >
-                  {isMyStatusOnline
-                    ? language === 'bn'
-                      ? 'অনলাইন (চালু)'
-                      : 'Active (On)'
-                    : language === 'bn'
-                    ? 'অফলাইন (বন্ধ)'
-                    : 'Offline (Off)'}
+                  {language === 'bn' ? 'মেসেঞ্জার সেটিংস →' : 'Open →'}
                 </button>
-              </div>
-
-              {/* Notification Sound Preference */}
-              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
-                <div>
-                  <h5 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                    <Bell className="w-4 h-4 text-blue-500" />
-                    <span>{language === 'bn' ? 'নোটিফিকেশন ও মেসেজ সাউন্ড' : 'Notification & Message Sounds'}</span>
-                  </h5>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    {language === 'bn'
-                      ? 'নতুন মেসেজ বা নোটিফিকেশনে অ্যালার্ট সাউন্ড চালু বা বন্ধ রাখুন।'
-                      : 'Control alert chimes for incoming messages and notifications.'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = !notifSoundEnabled;
-                    setNotifSoundEnabled(next);
-                    try {
-                      localStorage.setItem('bandhan_notif_sound', String(next));
-                    } catch {}
-                    showToast(
-                      next
-                        ? language === 'bn'
-                          ? '🔔 নোটিফিকেশন সাউন্ড চালু করা হয়েছে'
-                          : '🔔 Notification sounds enabled'
-                        : language === 'bn'
-                        ? '🔕 নোটিফিকেশন সাউন্ড মিউট করা হয়েছে'
-                        : '🔕 Notification sounds muted',
-                    );
-                  }}
-                  className={`rounded-xl transition-colors cursor-pointer text-xs font-bold px-3 py-1.5 ${
-                    notifSoundEnabled
-                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
-                      : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
-                  }`}
-                >
-                  {notifSoundEnabled
-                    ? language === 'bn'
-                      ? 'চালু (On)'
-                      : 'Enabled'
-                    : language === 'bn'
-                    ? 'বন্ধ (Muted)'
-                    : 'Muted'}
-                </button>
-              </div>
-
-              {/* Messenger Privacy Controls */}
-              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 space-y-3">
-                <h5 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-blue-600" />
-                  <span>{language === 'bn' ? 'মেসেঞ্জার প্রাইভেসি নিয়ন্ত্রণ' : 'Messenger Privacy Controls'}</span>
-                </h5>
-
-                <div className="flex items-center justify-between gap-3 pt-1">
-                  <div>
-                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                      {language === 'bn' ? 'টাইপিং ইন্ডিকেটর দেখান' : 'Show Typing Indicator'}
-                    </p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {language === 'bn'
-                        ? 'মেসেজ লেখার সময় অপর প্রান্তে "লিখছেন..." দেখাবে।'
-                        : 'Let recipients see when you are typing in real time.'}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = !typingIndicatorEnabled;
-                      setTypingIndicatorEnabled(next);
-                      try {
-                        localStorage.setItem('bandhan_pref_typing', String(next));
-                      } catch {}
-                      window.dispatchEvent(new Event('bandhan-prefs-updated'));
-                      showToast(
-                        next
-                          ? language === 'bn'
-                            ? 'টাইপিং ইন্ডিকেটর চালু হয়েছে'
-                            : 'Typing indicator enabled'
-                          : language === 'bn'
-                          ? 'টাইপিং ইন্ডিকেটর বন্ধ করা হয়েছে'
-                          : 'Typing indicator hidden',
-                      );
-                    }}
-                    className={`rounded-xl transition-colors cursor-pointer text-xs font-bold px-3 py-1.5 shrink-0 ${
-                      typingIndicatorEnabled
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                        : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
-                    }`}
-                  >
-                    {typingIndicatorEnabled ? (language === 'bn' ? 'চালু' : 'On') : (language === 'bn' ? 'বন্ধ' : 'Off')}
-                  </button>
-                </div>
-
-                <div className="h-px bg-slate-200/70 dark:bg-slate-700/70" />
-
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                      {language === 'bn' ? 'রিড রিসিপ্ট (Seen) পাঠান' : 'Send Read Receipts'}
-                    </p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {language === 'bn'
-                        ? 'আপনি মেসেজ দেখলে প্রেরকের কাছে Seen নিশ্চিতকরণ যাবে।'
-                        : 'Notify senders when you read their messages.'}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = !readReceiptsEnabled;
-                      setReadReceiptsEnabled(next);
-                      try {
-                        localStorage.setItem('bandhan_pref_read_receipts', String(next));
-                      } catch {}
-                      window.dispatchEvent(new Event('bandhan-prefs-updated'));
-                      showToast(
-                        next
-                          ? language === 'bn'
-                            ? 'রিড রিসিপ্ট চালু হয়েছে'
-                            : 'Read receipts enabled'
-                          : language === 'bn'
-                          ? 'রিড রিসিপ্ট বন্ধ করা হয়েছে'
-                          : 'Read receipts disabled',
-                      );
-                    }}
-                    className={`rounded-xl transition-colors cursor-pointer text-xs font-bold px-3 py-1.5 shrink-0 ${
-                      readReceiptsEnabled
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                        : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
-                    }`}
-                  >
-                    {readReceiptsEnabled ? (language === 'bn' ? 'চালু' : 'On') : (language === 'bn' ? 'বন্ধ' : 'Off')}
-                  </button>
-                </div>
               </div>
 
               {/* Blocked Accounts Manager */}

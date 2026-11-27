@@ -18,7 +18,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { SmartVideo } from './SmartVideo';
+import { SmartVideo, pauseAllOtherMedia } from './SmartVideo';
 import { SmartImage } from './SmartImage';
 
 interface FloatingParticle {
@@ -119,6 +119,10 @@ export const StoryViewerModal: React.FC = () => {
     setIsReactionsDrawerOpen(false);
     setFloatingParticles([]);
 
+    if (activeStoryIndex !== null) {
+      pauseAllOtherMedia(isVideoStory ? videoRef.current : audioRef.current);
+    }
+
     if (audioRef.current && !isVideoStory) {
       audioRef.current.currentTime = 0;
       if (!isMuted) {
@@ -187,6 +191,7 @@ export const StoryViewerModal: React.FC = () => {
     if (isPaused || isMusicDetailsOpen || isReactionsDrawerOpen) {
       vid.pause();
     } else {
+      pauseAllOtherMedia(vid);
       vid.play().catch(() => {});
     }
   }, [isPaused, isVideoStory, activeStoryIndex, isMusicDetailsOpen, isReactionsDrawerOpen]);

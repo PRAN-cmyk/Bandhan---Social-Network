@@ -51,7 +51,6 @@ import {
   Film,
   FileText,
   Check,
-  X,
 } from 'lucide-react';
 
 type FeedCategoryFilter = 'all' | 'photos' | 'videos' | 'text';
@@ -147,13 +146,6 @@ const MainContent: React.FC = () => {
       return sessionStorage.getItem('bandhan_welcome_shown') !== 'true';
     } catch {
       return false;
-    }
-  });
-  const [showWelcomeBanner, setShowWelcomeBanner] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('bandhan_welcome_banner_dismissed') !== 'true';
-    } catch {
-      return true;
     }
   });
 
@@ -290,53 +282,6 @@ const MainContent: React.FC = () => {
                     </div>
                   )}
 
-                  {/* WELCOME friend Hero Logo Banner (কেউ প্রথম ওয়েবসাইটে ঢুকলে দেখানোর জন্য) */}
-                  {showWelcomeBanner && (
-                    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-3.5 sm:p-5 text-white shadow-xl shadow-blue-500/20 mb-4 border border-white/20 animate-in fade-in slide-in-from-top-2 duration-300">
-                      <div className="absolute -right-8 -bottom-8 w-44 h-44 rounded-full bg-white/10 blur-2xl pointer-events-none" />
-                      <div className="absolute right-1/3 -top-10 w-36 h-36 rounded-full bg-pink-500/20 blur-xl pointer-events-none" />
-
-                      <div className="relative flex items-start sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          {/* Logo Icon with greeting handshake */}
-                          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-xl sm:text-3xl shadow-inner border border-white/30 shrink-0">
-                            🤝
-                          </div>
-                          <div>
-                            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/20 text-white text-[10px] sm:text-[11px] font-black uppercase tracking-wider backdrop-blur-sm mb-1">
-                              <span>✨</span>
-                              <span>WELCOME friend</span>
-                            </div>
-                            <h2 className="text-base sm:text-xl font-black tracking-tight leading-snug">
-                              {language === 'bn'
-                                ? 'স্বাগতম প্রিয় বন্ধু — বন্ধন সোশ্যাল প্ল্যাটফর্মে!'
-                                : 'WELCOME friend — Welcome to Bandhan Social!'}
-                            </h2>
-                            <p className="text-xs sm:text-sm text-blue-100 mt-0.5 max-w-xl">
-                              {language === 'bn'
-                                ? 'বন্ধুদের সাথে যুক্ত থাকুন, স্ট্যাটাস ও ছবি শেয়ার করুন, রিল দেখুন এবং দারুণ সব গেম খেলুন।'
-                                : 'Connect with friends, share stories, react with animated emojis, enjoy reels, and play games together.'}
-                            </p>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowWelcomeBanner(false);
-                            try {
-                              localStorage.setItem('bandhan_welcome_banner_dismissed', 'true');
-                            } catch {}
-                          }}
-                          className="p-1.5 rounded-full text-white/80 hover:text-white hover:bg-white/20 transition-colors cursor-pointer shrink-0"
-                          title={language === 'bn' ? 'বন্ধ করুন' : 'Dismiss'}
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Status Composer Box */}
                   <CreatePostBox />
 
@@ -405,7 +350,7 @@ const MainContent: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl">
+                      <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl">
                         {(
                           [
                             { id: 'latest', en: 'Latest', bn: 'নতুন' },

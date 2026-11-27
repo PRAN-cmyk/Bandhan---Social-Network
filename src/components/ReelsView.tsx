@@ -31,6 +31,7 @@ export const ReelsView: React.FC = () => {
     currentUser,
     toggleLikeReel,
     addReelComment,
+    incrementReelViews,
     incrementReelShares,
     setIsCreateReelOpen,
     isFollowingUser,
@@ -81,8 +82,8 @@ export const ReelsView: React.FC = () => {
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
   const [reelSeekFeedback, setReelSeekFeedback] = useState<{ reelId: string; dir: 'back' | 'forward'; id: number } | null>(null);
   const [activeReactionReelId, setActiveReactionReelId] = useState<string | null>(null);
-  const [reelVideoErrors, setReelVideoErrors] = useState<Record<string, boolean>>({});
   const reactionHoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const viewedReelIdsRef = useRef<Set<string>>(new Set());
 
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const cardRefs = useRef<Record<number, HTMLDivElement | null>>({});
@@ -181,6 +182,18 @@ export const ReelsView: React.FC = () => {
       }
     });
   }, [activeReelIndex, viewMode, isMuted, isManualPaused, reels]);
+
+  // Record a unique view when user watches a reel for 1.2s
+  useEffect(() => {
+    if (viewMode !== 'watch' || isManualPaused) return;
+    const activeReel = reels[activeReelIndex];
+    if (!activeReel || viewedReelIdsRef.current.has(activeReel.id)) return;
+    const timer = setTimeout(() => {
+      viewedReelIdsRef.current.add(activeReel.id);
+      incrementReelViews(activeReel.id);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [activeReelIndex, viewMode, isManualPaused, reels, incrementReelViews]);
 
   // Pause all videos on unmount
   useEffect(() => {
@@ -697,82 +710,29 @@ export const ReelsView: React.FC = () => {
               >
                 {/* Reel Video or Poster - Strictly controlled via videoRefs so only 1 video plays */}
                 {reel.videoUrl ? (
-                  <>
-                    <SmartVideo
-                      ref={(el) => {
-                        videoRefs.current[reel.id] = el;
-                      }}
-                      src={reel.videoUrl}
-                      poster={reel.posterUrl}
-                      loop
-                      preload="metadata"
-                      muted={isMuted || !isCurrentlyPlaying}
-                      playsInline
-                      language={language}
-                      containerClassName="absolute inset-0 w-full h-full bg-black"
-                      onLoadedData={() => {
-                        if (reelVideoErrors[reel.id]) {
-                          setReelVideoErrors((prev) => ({ ...prev, [reel.id]: false }));
-                        }
-                      }}
-                      onError={() => {
-                        setReelVideoErrors((prev) => ({ ...prev, [reel.id]: true }));
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (isCurrentActive) {
-                          setIsManualPaused((p) => !p);
-                        } else {
-                          setActiveReelIndex(idx);
-                          setIsManualPaused(false);
-                        }
-                      }}
-                      className={`w-full h-full object-cover cursor-pointer ${
-                        reelVideoErrors[reel.id] ? 'opacity-0 pointer-events-none' : ''
-                      }`}
-                    />
-                    <SmartImage
-                      src={reel.posterUrl}
-                      alt={reel.description}
-                      fallbackType="media"
-                      fallbackLabel={reel.author.name}
-                      className="absolute inset-0 w-full h-full object-cover -z-10"
-                    />
-                    {reelVideoErrors[reel.id] && (
-                      <div
-                        onClick={(e) => e.stopPropagation()}
-                        className="absolute inset-0 z-15 bg-slate-950/75 backdrop-blur-xs flex flex-col items-center justify-center gap-3 p-6 text-center text-white"
-                      >
-                        <div className="w-12 h-12 rounded-full bg-rose-500/20 border border-rose-400/40 flex items-center justify-center">
-                          <Play className="w-5 h-5 text-rose-400 fill-current ml-0.5" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold">
-                            {language === 'bn' ? 'রিল ভিডিওটি লোড করা যায়নি' : 'Reel video failed to load'}
-                          </p>
-                          <p className="text-xs text-slate-300 mt-1">
-                            {language === 'bn' ? 'পুনরায় লোড করতে নিচের বাটনে চাপ দিন' : 'Tap below to reload the video'}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setReelVideoErrors((prev) => ({ ...prev, [reel.id]: false }));
-                            const vid = videoRefs.current[reel.id];
-                            if (vid) {
-                              vid.load();
-                              vid.play().catch(() => {});
-                            }
-                          }}
-                          className="px-4 py-2 rounded-full bg-rose-600 hover:bg-rose-500 text-xs font-bold text-white flex items-center gap-1.5 shadow-lg cursor-pointer transition-colors"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                          <span>{language === 'bn' ? 'পুনরায় চেষ্টা করুন' : 'Retry Video'}</span>
-                        </button>
-                      </div>
-                    )}
-                  </>
+                  <SmartVideo
+                    ref={(el) => {
+                      videoRefs.current[reel.id] = el;
+                    }}
+                    src={reel.videoUrl}
+                    poster={reel.posterUrl}
+                    loop
+                    preload="metadata"
+                    muted={isMuted || !isCurrentlyPlaying}
+                    playsInline
+                    language={language}
+                    containerClassName="absolute inset-0 w-full h-full bg-black"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isCurrentActive) {
+                        setIsManualPaused((p) => !p);
+                      } else {
+                        setActiveReelIndex(idx);
+                        setIsManualPaused(false);
+                      }
+                    }}
+                    className="w-full h-full object-cover cursor-pointer"
+                  />
                 ) : (
                   <SmartImage
                     src={reel.posterUrl}

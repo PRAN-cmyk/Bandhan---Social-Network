@@ -1,10 +1,31 @@
-import React, { useState, useEffect, useImperativeHandle, useRef, forwardRef } from 'react';
+import React, { useState, useEffect, useImperativeHandle, useRef, forwardRef, useId } from 'react';
 import { Play, RotateCcw, Film, CloudOff } from 'lucide-react';
 
 const PUBLIC_FALLBACK_VIDEOS = [
   'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
   'https://www.w3schools.com/html/mov_bbb.mp4',
 ];
+
+const VIDEO_PLAY_EVENT = 'bandhan:media-play';
+
+/**
+ * Global single-media playback coordinator:
+ * Whenever any video or audio track starts playing, every OTHER <video> and <audio>
+ * element in the document is paused immediately so two clips never play at once.
+ */
+export function pauseAllOtherMedia(activeElement?: HTMLMediaElement | null): void {
+  if (typeof document === 'undefined') return;
+  try {
+    document.querySelectorAll('video, audio').forEach((media) => {
+      const el = media as HTMLMediaElement;
+      if (el && el !== activeElement && !el.paused) {
+        el.pause();
+      }
+    });
+  } catch {
+    // ignore DOM query errors
+  }
+}
 
 export function isSafeVideoUrl(url?: string | null): boolean {
   if (!url) return false;
@@ -47,6 +68,7 @@ export interface SmartVideoProps {
   compact?: boolean;
   title?: string;
   onClick?: React.MouseEventHandler<HTMLVideoElement>;
+  onPlay?: React.ReactEventHandler<HTMLVideoElement>;
   onTimeUpdate?: React.ReactEventHandler<HTMLVideoElement>;
   onEnded?: React.ReactEventHandler<HTMLVideoElement>;
   onLoadedData?: React.ReactEventHandler<HTMLVideoElement>;
@@ -70,6 +92,7 @@ export const SmartVideo = forwardRef<HTMLVideoElement, SmartVideoProps>(
       compact = false,
       title,
       onClick,
+      onPlay,
       onTimeUpdate,
       onEnded,
       onLoadedData,
@@ -77,6 +100,7 @@ export const SmartVideo = forwardRef<HTMLVideoElement, SmartVideoProps>(
     },
     forwardedRef,
   ) => {
+    const instanceId = useId();
     const internalRef = useRef<HTMLVideoElement | null>(null);
     useImperativeHandle(forwardedRef, () => internalRef.current as HTMLVideoElement);
 
@@ -90,6 +114,20 @@ export const SmartVideo = forwardRef<HTMLVideoElement, SmartVideoProps>(
       setFallbackIndex(-1);
       setHasError(!isSafeVideoUrl(src) || Boolean(src && src.startsWith('idb://')));
     }, [src]);
+
+    // Pause this video whenever another SmartVideo starts playing
+    useEffect(() => {
+      const handleOtherPlay = (event: Event) => {
+        const custom = event as CustomEvent<{ id?: string; el?: HTMLVideoElement | null }>;
+        const el = internalRef.current;
+        if (!el) return;
+        if (custom.detail?.id !== instanceId && custom.detail?.el !== el && !el.paused) {
+          el.pause();
+        }
+      };
+      window.addEventListener(VIDEO_PLAY_EVENT, handleOtherPlay);
+      return () => window.removeEventListener(VIDEO_PLAY_EVENT, handleOtherPlay);
+    }, [instanceId]);
 
     const activeSrc =
       fallbackIndex >= 0 && fallbackIndex < PUBLIC_FALLBACK_VIDEOS.length
@@ -105,6 +143,13 @@ export const SmartVideo = forwardRef<HTMLVideoElement, SmartVideoProps>(
       onError?.();
     };
 
+    const handleVideoPlay = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+      const el = e.currentTarget;
+      pauseAllOtherMedia(el);
+      window.dispatchEvent(new CustomEvent(VIDEO_PLAY_EVENT, { detail: { id: instanceId, el } }));
+      onPlay?.(e);
+    };
+
     const handleRetry = (e: React.MouseEvent) => {
       e.stopPropagation();
       if (!validSrc || isUnresolvedLocalIdb) return;
@@ -112,6 +157,7 @@ export const SmartVideo = forwardRef<HTMLVideoElement, SmartVideoProps>(
       setHasError(false);
       setTimeout(() => {
         if (internalRef.current) {
+          pauseAllOtherMedia(internalRef.current);
           internalRef.current.load();
           internalRef.current.play().catch(() => {});
         }
@@ -143,7 +189,10 @@ export const SmartVideo = forwardRef<HTMLVideoElement, SmartVideoProps>(
             muted={muted}
             playsInline={playsInline}
             preload={preload}
+            controlsList="nodownload"
+            onContextMenu={(e) => e.preventDefault()}
             onClick={onClick}
+            onPlay={handleVideoPlay}
             onTimeUpdate={onTimeUpdate}
             onEnded={onEnded}
             onLoadedData={(e) => {
